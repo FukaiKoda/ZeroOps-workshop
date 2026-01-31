@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from docker_runner import DockerRunner, DockerRunnerException, create_temp_student_dir
-from sandbox import get_sandbox_config, sandbox_config_to_docker_kwargs
+from workers.docker_runner import DockerRunner, DockerRunnerException, create_temp_student_dir
+from workers.sandbox import get_sandbox_config, sandbox_config_to_docker_kwargs
 
 # Import schemas from shared module
 import sys

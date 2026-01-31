@@ -1,7 +1,15 @@
 {
   "id": "ex00_hello",
-  "points": 10,
+  "slug": "ex00-hello",
+  "title": "Hello World",
+  "points": 50,
+  "stack": "python",
+  "allowed_files": ["main.py"],
+  "forbidden_functions": [],
   "requirements": [],
-  "setup_script": "setup_hello.sh",
-  "test_suite": "test_hello.py"
+  "docker_image": "python:3.11-alpine",
+  "grader_script_path": "test.py",
+  "mount_path": "/student",
+  "timeout_seconds": 10,
+  "subject_md_path": "subject.md"
 }
