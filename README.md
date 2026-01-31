@@ -455,3 +455,83 @@ Inside TUI:
 
 **TUI shows no logo**
 - Ensure `ascii-art.txt` exists at repo root.
+
+---
+
+## Ops Runbook
+
+### Service Start/Stop (systemd)
+Start:
+```bash
+sudo systemctl start zeroops
+```
+Stop:
+```bash
+sudo systemctl stop zeroops
+```
+Restart:
+```bash
+sudo systemctl restart zeroops
+```
+Status:
+```bash
+sudo systemctl status zeroops
+```
+
+### Logs
+If running under systemd:
+```bash
+journalctl -u zeroops -f
+```
+
+If running directly in a shell, the logs are in the terminal session.
+
+### Health Check
+Basic check:
+```bash
+curl -s http://127.0.0.1:8000/docs >/dev/null && echo OK
+```
+
+### Backup / Restore
+Backup the DB:
+```bash
+cp server/db.json server/db.json.bak.$(date +%Y%m%d%H%M%S)
+```
+
+Restore from backup:
+```bash
+cp server/db.json.bak.YYYYMMDDHHMMSS server/db.json
+```
+
+### Rotate Secrets
+1. Stop the server.
+2. Update `APP_SECRET` and `ADMIN_TOKEN` in the service environment.
+3. Restart the server.
+4. Update client environments to match `APP_SECRET`.
+
+### Common Incidents
+**401 Invalid signature**
+- `APP_SECRET` mismatch between client and server.
+- Restart server after exporting the secret in its shell.
+
+**Timestamp skew too large**
+- Ensure system clock is correct on the client.
+- Temporarily set `ALLOW_CLOCK_SKEW=1` only for debugging.
+
+**DB corruption**
+- The DB auto-backs up corrupted content to `server/db.json.bak.<timestamp>`.
+- Restore a known-good backup if needed.
+
+### Deployment / Upgrade
+1. Pull new code.
+2. Activate venv.
+3. Update dependencies if needed:
+   ```bash
+   pip install -r server/requirements.txt -r client/requirements.txt
+   ```
+4. Restart the service.
+
+### Rollback
+1. Checkout the previous commit/tag.
+2. Restart the service.
+3. Verify with a health check and a test client sync.
