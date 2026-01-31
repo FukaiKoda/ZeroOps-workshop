@@ -1,4 +1,4 @@
-.PHONY: all install run-server run-client dev
+.PHONY: all install run-server run-client dev stop-server test-health test-exercise test-me test-submit
 
 all: dev
 
@@ -20,34 +20,32 @@ dev:
 	@sleep 2
 	@echo "Starting Client..."
 	@-cd client && poetry run python src/main.py tui
-	@echo "Stopping Server..."
-	@kill `cat .server.pid` && rm .server.pid
+	@$(MAKE) stop-server
+
+stop-server:
+	@if [ -f server/.server.pid ]; then \
+		PID=$$(cat server/.server.pid); \
+		echo "Stopping Server (PID $$PID)..."; \
+		kill $$PID && rm server/.server.pid; \
+	else \
+		echo "Server PID not found."; \
+	fi
 
 test-health:
 	@echo "Testing Health Endpoint..."
 	@curl -s http://127.0.0.1:8000/health | python3 -m json.tool
 
-test-status:
-	@echo "Testing Status Endpoint for 'test_user'..."
-	@curl -s http://127.0.0.1:8000/v1/status/test_user | python3 -m json.tool
+test-me:
+	@echo "Testing /v1/me (uses ZEROOPS_SESSION_TOKEN env)..."
+	@curl -s http://127.0.0.1:8000/v1/me -H "Authorization: Bearer $$ZEROOPS_SESSION_TOKEN" | python3 -m json.tool
 
-test-grade:
-	@echo "Submitting ex00_hello for 'test_user'..."
-	@curl -X POST http://127.0.0.1:8000/v1/grade \
+test-exercise:
+	@echo "Fetching next exercise for user..."
+	@curl -s http://127.0.0.1:8000/v1/exercise -H "Authorization: Bearer $$ZEROOPS_SESSION_TOKEN" | python3 -m json.tool
+
+test-submit:
+	@echo "Submitting ex00-hello (requires Docker for grading to complete)..."
+	@curl -s -X POST http://127.0.0.1:8000/v1/submit \
 		-H "Content-Type: application/json" \
-		-d '{"user_id": "test_user", "exercise_id": "ex00_hello", "code": "print(1)"}' | python3 -m json.tool
-
-test-exercises:
-	@echo "Fetching details for ex00_hello..."
-	@curl -s http://127.0.0.1:8000/v1/exercises/ex00_hello | python3 -m json.tool
-
-test-grade-docker:
-	@echo "Submitting ex01_docker for 'test_user'..."
-	@curl -X POST http://127.0.0.1:8000/v1/grade \
-		-H "Content-Type: application/json" \
-		-d '{"user_id": "test_user", "exercise_id": "ex01_docker", "code": "FROM alpine\nCMD echo hello"}' | python3 -m json.tool
-
-test-leaderboard:
-	@echo "Fetching Leaderboard..."
-	@curl -s http://127.0.0.1:8000/v1/leaderboard | python3 -m json.tool
+		-d '{"session_token": "'$$ZEROOPS_SESSION_TOKEN'", "exercise_slug": "ex00-hello", "files": [{"filename": "main.py", "content": "print(1)"}], "client_version": "0.1.0"}' | python3 -m json.tool
 
