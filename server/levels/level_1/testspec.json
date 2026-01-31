@@ -1,0 +1,12 @@
+{
+  "level": 1,
+  "entrypoint": "solution.py",
+  "function": "add",
+  "cases": [
+    {"name": "simple", "args": [2, 3], "expected": 5},
+    {"name": "negatives", "args": [-1, -2], "expected": -3},
+    {"name": "zero", "args": [0, 5], "expected": 5},
+    {"name": "mixed", "args": [10, -7], "expected": 3}
+  ],
+  "constraints": {"timeout_seconds": 2}
+}

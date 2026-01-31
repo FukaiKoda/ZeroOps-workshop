@@ -1,0 +1,14 @@
+{
+  "level": 2,
+  "entrypoint": "solution.py",
+  "function": "is_palindrome",
+  "cases": [
+    {"name": "simple_true", "args": ["race car"], "expected": true},
+    {"name": "simple_false", "args": ["hello"], "expected": false},
+    {"name": "mixed_case", "args": ["Race Car"], "expected": true},
+    {"name": "phrase", "args": ["A man a plan a canal panama"], "expected": true},
+    {"name": "empty", "args": [""], "expected": true},
+    {"name": "spaces", "args": ["   "], "expected": true}
+  ],
+  "constraints": {"timeout_seconds": 2}
+}

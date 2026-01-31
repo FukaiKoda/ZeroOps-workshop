@@ -1,0 +1,12 @@
+Level 1: add(a, b)
+
+Implement the function add(a, b) in solution.py.
+If solution.py does not exist in your workspace, create it.
+
+Rules:
+- Return the sum of a and b.
+- Do not print anything.
+
+How to test:
+- Use the client command: correct
+- The client will run the tests locally and submit results.

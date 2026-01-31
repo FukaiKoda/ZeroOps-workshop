@@ -1,0 +1,15 @@
+Level 2: is_palindrome(s)
+
+Implement the function is_palindrome(s) in solution.py.
+If solution.py does not exist in your workspace, create it.
+
+Normalization rules:
+- Convert to lowercase.
+- Ignore spaces.
+
+Examples:
+- "Race car" -> True
+- "hello" -> False
+
+How to test:
+- Use the client command: correct
