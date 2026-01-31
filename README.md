@@ -10,6 +10,26 @@ Target runtime: **Python 3.10 or 3.11** (Ubuntu 22.04). Python 3.14 is not suppo
 
 ---
 
+## Contents
+- [Project Structure](#project-structure)
+- [Quick Start](#quick-start)
+- [Server](#server)
+- [Client](#client)
+- [Workspace Layout](#workspace-layout)
+- [Client Workflow](#client-workflow-step-by-step)
+- [Server Workflow](#server-workflow-step-by-step)
+- [Authentication](#authentication)
+- [Database](#database-serverdbpy)
+- [Testspec Format](#testspec-format)
+- [Admin Endpoint](#admin-endpoint)
+- [API Reference (Endpoints + Schemas)](#api-reference-endpoints--schemas)
+- [Sequence Diagrams (Text)](#sequence-diagrams-text)
+- [Deployment Notes](#deployment-notes)
+- [Example Session](#example-session)
+- [Troubleshooting](#troubleshooting)
+
+---
+
 ## Project Structure
 ```
 .
@@ -245,6 +265,161 @@ curl -H "X-Admin-Token: $ADMIN_TOKEN" "$SERVER_URL/v1/admin/users"
 ```
 
 Returns list of users and levels.
+
+---
+
+## API Reference (Endpoints + Schemas)
+
+### Endpoints
+| Method | Path | Purpose | Auth | Request Body | Response |
+|---|---|---|---|---|---|
+| POST | `/v1/sync` | Create/update user + get current level | HMAC | `Identity` | `SyncResponse` |
+| GET | `/v1/subject` | Get subject text for current level | HMAC | `Identity` (JSON body) | `SubjectResponse` |
+| GET | `/v1/testspec` | Get testspec for current level | HMAC | `Identity` (JSON body) | `TestSpecResponse` |
+| POST | `/v1/submit` | Submit results and advance if pass | HMAC | `SubmitRequest` | `SubmitResponse` |
+| GET | `/v1/admin/users` | List users + levels | Admin token | None | `AdminUsersResponse` |
+
+**Auth requirements**  
+- HMAC endpoints require `X-Signature` over the canonical JSON body.  
+- `/v1/admin/users` requires `X-Admin-Token` matching `ADMIN_TOKEN`.
+
+### Core Schemas (abbrev)
+**Identity**
+```json
+{
+  "protocol_version": 1,
+  "username": "alice",
+  "hostname": "machine",
+  "client_id": "uuid",
+  "timestamp": "2026-01-30T12:00:00Z"
+}
+```
+
+**SyncResponse**
+```json
+{ "level": 1, "total_levels": 2 }
+```
+
+**SubjectResponse**
+```json
+{
+  "level": 1,
+  "total_levels": 2,
+  "subject": "text...",
+  "starter_files": []
+}
+```
+
+**TestSpecResponse**
+```json
+{
+  "level": 1,
+  "testspec": {
+    "level": 1,
+    "entrypoint": "solution.py",
+    "function": "add",
+    "cases": [{"name":"simple","args":[1,2],"expected":3}],
+    "constraints": {"timeout_seconds": 2}
+  },
+  "constraints": {"timeout_seconds": 2}
+}
+```
+
+**SubmitRequest**
+```json
+{
+  "identity": { "...": "..." },
+  "results": {
+    "level": 1,
+    "pass": false,
+    "tests": [{"name":"simple","pass":true,"message":""}],
+    "runtime_ms": 35,
+    "error": null
+  }
+}
+```
+
+**SubmitResponse**
+```json
+{ "level": 2, "feedback": "Great job! 4/4 tests passed." }
+```
+
+---
+
+## Sequence Diagrams (Text)
+
+### 1) Sync + Subject
+```
+Client            Server
+  |  POST /v1/sync  |
+  |--------------->|
+  |   level + count|
+  |<---------------|
+  | GET /v1/subject|
+  |--------------->|
+  | subject text   |
+  |<---------------|
+```
+
+### 2) Grademe (Local Run + Submit)
+```
+Client                           Server
+  |  GET /v1/testspec              |
+  |------------------------------->|
+  |  testspec JSON                 |
+  |<-------------------------------|
+  |  run local tests (runner.py)   |
+  |  POST /v1/submit               |
+  |------------------------------->|
+  |  feedback + new level          |
+  |<-------------------------------|
+```
+
+---
+
+## Deployment Notes
+
+### Development (hot reload)
+```bash
+uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Production (systemd example)
+Create `/etc/systemd/system/zeroops.service`:
+```
+[Unit]
+Description=ZeroOps Exercise Platform
+After=network.target
+
+[Service]
+WorkingDirectory=/path/to/ZeroOps-workshop
+Environment=APP_SECRET=your-secret
+Environment=ADMIN_TOKEN=your-admin-token
+ExecStart=/path/to/ZeroOps-workshop/.venv/bin/uvicorn server.app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now zeroops
+```
+
+### Backups
+The server DB is a single JSON file (`server/db.json`). Back it up regularly:
+```bash
+cp server/db.json server/db.json.bak
+```
+
+### Scaling
+This implementation is single-node by design. If you need horizontal scaling:
+- Move storage to a shared DB
+- Replace local file locking with distributed locking
+- Store testspec/subjects in a shared object store or repository
 
 ---
 
