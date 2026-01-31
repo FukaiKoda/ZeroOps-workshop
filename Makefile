@@ -64,7 +64,7 @@ docker-up:
 	docker-compose run --rm client
 
 docker-down:
-	@echo "Stopping all services..."
+	@echo "Stopping all services...""
 	docker-compose down
 
 docker-logs:
