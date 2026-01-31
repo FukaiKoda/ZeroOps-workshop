@@ -1,1 +1,18 @@
-# pyproject.toml for server
+[tool.poetry]
+name = "zeroops-server"
+version = "0.1.0"
+description = "ZeroOps Workshop Server Logic"
+authors = ["ZeroOps <Zeroops@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+pydantic = "^2.6.0"
+docker = "^7.0.0"
+httpx = "^0.28.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

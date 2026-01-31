@@ -1,0 +1,14 @@
+Screen {
+    background: $surface;
+    color: $text;
+}
+
+:dark {
+    background: #1e1e1e;
+    color: #f0f0f0;
+}
+
+:light {
+    background: #f0f0f0;
+    color: #1e1e1e;
+}

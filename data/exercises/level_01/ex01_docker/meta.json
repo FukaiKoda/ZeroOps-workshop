@@ -1,0 +1,10 @@
+{
+  "id": "ex01_docker",
+  "points": 20,
+  "requirements": [
+    "ex00_hello"
+  ],
+  "setup_script": "setup_docker.sh",
+  "test_suite": "test_docker.py",
+  "type": "dockerfile"
+}
