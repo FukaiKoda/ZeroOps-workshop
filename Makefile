@@ -1,25 +1,27 @@
-.PHONY: all install run-server run-client dev stop-server test-health test-exercise test-me test-submit
+.PHONY: all install run-server run-client dev stop-server test-health test-exercise test-me test-submit docker-build docker-up docker-down docker-logs
 
 all: dev
 
 install:
-	cd server && poetry install
-	cd client && poetry install
+	@echo "Installing server dependencies..."
+	cd server && pip install -e .
+	@echo "Installing client dependencies..."
+	cd client && pip install textual typer httpx pydantic-settings click pillow
 
 run-server:
-	cd server && poetry run uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
+	cd server && /usr/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
 
 run-client:
-	cd client && poetry run python src/main.py tui
+	cd client/src && /usr/bin/python3 main.py tui
 
 dev:
 	@echo "Starting Server in background..."
 	@# Start server in background and save PID
-	@cd server && poetry run uvicorn src.main:app --host 127.0.0.1 --port 8000 > /dev/null 2>&1 & echo $$! > .server.pid
-	@echo "Server started with PID `cat .server.pid`"
+	@cd server && /usr/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8000 > /dev/null 2>&1 & echo $$! > .server.pid
+	@echo "Server started with PID `cat server/.server.pid`"
 	@sleep 2
 	@echo "Starting Client..."
-	@-cd client && poetry run python src/main.py tui
+	@-cd client/src && /usr/bin/python3 main.py tui
 	@$(MAKE) stop-server
 
 stop-server:
@@ -48,4 +50,33 @@ test-submit:
 	@curl -s -X POST http://127.0.0.1:8000/v1/submit \
 		-H "Content-Type: application/json" \
 		-d '{"session_token": "'$$ZEROOPS_SESSION_TOKEN'", "exercise_slug": "ex00-hello", "files": [{"filename": "main.py", "content": "print(1)"}], "client_version": "0.1.0"}' | python3 -m json.tool
+
+# Docker commands
+docker-build:
+	@echo "Building Docker images..."
+	docker-compose build
+
+docker-up:
+	@echo "Starting services with Docker Compose..."
+	docker-compose up -d server
+	@sleep 2
+	@echo "Server is ready. Starting client..."
+	docker-compose run --rm client
+
+docker-down:
+	@echo "Stopping all services..."
+	docker-compose down
+
+docker-logs:
+	@echo "Showing logs..."
+	docker-compose logs -f
+
+docker-server:
+	@echo "Starting only the server..."
+	docker-compose up -d server
+	@echo "Server running at http://localhost:8000"
+
+docker-client:
+	@echo "Starting client (requires server to be running)..."
+	docker-compose run --rm client
 
