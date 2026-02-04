@@ -7,7 +7,7 @@ install:
 	cd client && poetry install
 
 run-server:
-	cd server && poetry run uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
+	cd server && poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
 
 run-client:
 	cd client && poetry run python src/main.py tui
@@ -15,7 +15,7 @@ run-client:
 dev:
 	@echo "Starting Server in background..."
 	@# Start server in background and save PID
-	@cd server && poetry run uvicorn src.main:app --host 127.0.0.1 --port 8000 > /dev/null 2>&1 & echo $$! > .server.pid
+	@cd server && poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 > /dev/null 2>&1 & echo $$! > .server.pid
 	@echo "Server started with PID `cat .server.pid`"
 	@sleep 2
 	@echo "Starting Client..."
