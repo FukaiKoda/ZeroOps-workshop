@@ -1,0 +1,10 @@
+{
+  "id": "ex04_k8s_nodeport",
+  "title": "Services - NodePort",
+  "points": 20,
+  "requirements": ["ex03_k8s_service_clusterip"],
+  "type": "kubernetes",
+  "difficulty": "beginner",
+  "estimated_time": "15 minutes",
+  "tags": ["kubernetes", "services", "networking", "nodeport"]
+}

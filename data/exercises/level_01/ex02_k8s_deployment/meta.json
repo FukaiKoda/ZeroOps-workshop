@@ -1,0 +1,10 @@
+{
+  "id": "ex02_k8s_deployment",
+  "title": "Deployments - The Standard Way",
+  "points": 25,
+  "requirements": ["ex01_k8s_replicaset"],
+  "type": "kubernetes",
+  "difficulty": "beginner",
+  "estimated_time": "15 minutes",
+  "tags": ["kubernetes", "deployment", "rollout"]
+}
