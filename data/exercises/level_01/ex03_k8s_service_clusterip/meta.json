@@ -1,0 +1,10 @@
+{
+  "id": "ex03_k8s_service_clusterip",
+  "title": "Services - ClusterIP",
+  "points": 20,
+  "requirements": ["ex02_k8s_deployment"],
+  "type": "kubernetes",
+  "difficulty": "beginner",
+  "estimated_time": "15 minutes",
+  "tags": ["kubernetes", "services", "networking", "clusterip"]
+}
