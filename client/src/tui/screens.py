@@ -6,6 +6,79 @@ from api.client import ZeroOpsClient
 from utils.config import settings
 
 
+class SubmissionResultScreen(ModalScreen):
+    """Modal screen to display submission results with details."""
+
+    CSS = """
+    SubmissionResultScreen {
+        align: center middle;
+    }
+
+    #result-dialog {
+        padding: 1 2;
+        width: 80;
+        height: auto;
+        max-height: 80%;
+        border: thick $background 80%;
+        background: $surface;
+    }
+
+    #result-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        width: 100%;
+    }
+
+    #result-title.success {
+        color: $success;
+    }
+
+    #result-title.failure {
+        color: $error;
+    }
+
+    #result-message {
+        margin: 1 0;
+        padding: 1;
+        border: solid $primary;
+        height: auto;
+        max-height: 20;
+        overflow-y: auto;
+    }
+
+    #result-close {
+        margin-top: 1;
+        width: 100%;
+    }
+    """
+
+    def __init__(self, success: bool, message: str, exercise_id: str = ""):
+        super().__init__()
+        self.success = success
+        self.message = message
+        self.exercise_id = exercise_id
+
+    def compose(self) -> ComposeResult:
+        title_class = "success" if self.success else "failure"
+        title_text = "✅ Submission Successful!" if self.success else "❌ Submission Failed"
+        
+        yield Container(
+            Label(title_text, id="result-title", classes=title_class),
+            Label(f"Exercise: {self.exercise_id}", id="result-exercise"),
+            ScrollableContainer(
+                Static(self.message, id="result-message-text"),
+                id="result-message"
+            ),
+            Button("Close", variant="primary" if self.success else "error", id="result-close"),
+            id="result-dialog",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "result-close":
+            self.app.pop_screen()
+
+
 class QuitScreen(ModalScreen):
     """Screen with a dialog to quit."""
 
@@ -231,22 +304,65 @@ class Dashboard(Screen):
 
         self.notify(f"Submitting {self.current_exercise}...", severity="information")
         
-        # Determine code to submit based on exercise
-        target_file = "main.py" 
-        if self.current_exercise == "ex01_docker":
-             target_file = "Dockerfile"
+        # Get exercise details to determine file type
+        client = ZeroOpsClient()
+        details = await client.get_exercise_details(self.current_exercise)
+        await client.close()
         
-        file_path = settings.RENDU_DIR / self.current_exercise / target_file
+        exercise_type = details.get("type", "python")
         
-        if not file_path.exists():
-            self.notify(f"Missing file: {target_file} in {self.current_exercise}", severity="error")
-            return
-
-        try:
-            with open(file_path, "r") as f:
-                code_to_submit = f.read()
-        except Exception as e:
-            self.notify(f"Error reading file: {e}", severity="error")
+        # Determine target files based on exercise type
+        target_files = self._get_target_files(exercise_type)
+        
+        exercise_dir = settings.RENDU_DIR / self.current_exercise
+        code_to_submit = ""
+        files_found = []
+        
+        # Collect all matching files
+        for target_file in target_files:
+            file_path = exercise_dir / target_file
+            if file_path.exists():
+                files_found.append(target_file)
+                try:
+                    with open(file_path, "r") as f:
+                        content = f.read()
+                        if code_to_submit:
+                            code_to_submit += "\n---\n"  # YAML document separator
+                        code_to_submit += content
+                except Exception as e:
+                    self.notify(f"Error reading {target_file}: {e}", severity="error")
+                    return
+        
+        # Also check for any .yaml/.yml files in kubernetes exercises
+        if exercise_type == "kubernetes":
+            for yaml_file in exercise_dir.glob("*.yaml"):
+                if yaml_file.name not in files_found:
+                    files_found.append(yaml_file.name)
+                    try:
+                        with open(yaml_file, "r") as f:
+                            content = f.read()
+                            if code_to_submit:
+                                code_to_submit += "\n---\n"
+                            code_to_submit += content
+                    except Exception as e:
+                        self.notify(f"Error reading {yaml_file.name}: {e}", severity="error")
+                        return
+            for yml_file in exercise_dir.glob("*.yml"):
+                if yml_file.name not in files_found:
+                    files_found.append(yml_file.name)
+                    try:
+                        with open(yml_file, "r") as f:
+                            content = f.read()
+                            if code_to_submit:
+                                code_to_submit += "\n---\n"
+                            code_to_submit += content
+                    except Exception as e:
+                        self.notify(f"Error reading {yml_file.name}: {e}", severity="error")
+                        return
+        
+        if not files_found:
+            expected = ", ".join(target_files)
+            self.notify(f"No files found. Expected: {expected}", severity="error")
             return
         
         client = ZeroOpsClient()
@@ -254,9 +370,37 @@ class Dashboard(Screen):
 
         await client.close()
         
-        if data.get("status") == "success":
-            self.notify(f"Success! {data.get('message')}", severity="information")
+        is_success = data.get("status") == "success"
+        message = data.get("message", "Unknown result")
+        
+        # Show detailed result in modal
+        self.app.push_screen(SubmissionResultScreen(
+            success=is_success,
+            message=message,
+            exercise_id=self.current_exercise
+        ))
+        
+        if is_success:
             await self.refresh_status()
-        else:
-            self.notify(f"Failed: {data.get('message')}", severity="error")
+
+    def _get_target_files(self, exercise_type: str) -> list:
+        """Return list of expected files based on exercise type."""
+        file_mapping = {
+            "python": ["main.py"],
+            "docker": ["Dockerfile"],
+            "kubernetes": [
+                "deployment.yaml", "service.yaml", "pod.yaml", 
+                "configmap.yaml", "secret.yaml", "ingress.yaml",
+                "pv.yaml", "pvc.yaml", "namespace.yaml", "replicaset.yaml"
+            ],
+            "docker-compose": ["docker-compose.yaml", "docker-compose.yml"],
+            "prometheus": ["prometheus.yml", "prometheus.yaml", "alerting-rules.yml"],
+            "grafana": ["dashboard.json", "datasource.yaml"],
+            "terraform": ["main.tf", "variables.tf", "outputs.tf"],
+            "ansible": ["playbook.yaml", "playbook.yml", "inventory.ini"],
+            "helm": ["Chart.yaml", "values.yaml"],
+            "shell": ["script.sh", "main.sh"],
+            "c": ["main.c", "Makefile"],
+        }
+        return file_mapping.get(exercise_type, ["main.py"])
 

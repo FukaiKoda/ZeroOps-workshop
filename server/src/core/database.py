@@ -96,41 +96,47 @@ class JSONDatabase:
         # Update progress map
         user.progress[history_entry.ex_id] = history_entry.status
         
-        # Simple level up logic: If success, increment level
+        # Level up logic: Only level up if ALL exercises in current level are SOLVED
         if history_entry.status == ExerciseState.SOLVED:
-             # Basic check: Prevent duplicate level ups for the same exercise if already solved? 
-             # For this workshop, we just increment if it's the current level's exercise
-             # Real logic would check dependencies.
-             
-             # Determine current level exercise ID
-             current_level_dir = self.exercises_dir / f"level_{user.current_level:02d}"
-             if current_level_dir.exists():
-                 # Very naive: assumes 1 exercise per level for now or any solved exercise in level bumps it
-                 # In reality: check if ALL exercises in level are solved.
-                 # Let's keep it simple: If score == 100, level up.
-                     # Calculate XP 
-                     # Search for exercise meta across all levels to get points
-                     # Since we don't know the level of the exercise easily here without scanning
-                     # We can reuse get_exercise_details logic or simple scan
-                     
-                     # Optimization: try current level first, then scan?
-                     # Let's just use the scan logic from get_exercise_details (re-implemented simply here)
-                     found_meta = None
-                     for level_dir in self.exercises_dir.iterdir():
-                         if level_dir.is_dir() and level_dir.name.startswith("level_"):
-                             potential_path = level_dir / history_entry.ex_id / "meta.json"
-                             if potential_path.exists():
-                                 try:
-                                     with open(potential_path, "r") as f:
-                                         found_meta = ExerciseMetadata(**json.load(f))
-                                     break
-                                 except:
-                                     pass
-                     
-                     if found_meta:
-                         user.total_xp += found_meta.points
-                     
-                     user.current_level += 1
+            # Find the exercise meta to get points
+            found_meta = None
+            exercise_level = None
+            
+            for level_dir in self.exercises_dir.iterdir():
+                if level_dir.is_dir() and level_dir.name.startswith("level_"):
+                    potential_path = level_dir / history_entry.ex_id / "meta.json"
+                    if potential_path.exists():
+                        try:
+                            with open(potential_path, "r") as f:
+                                found_meta = ExerciseMetadata(**json.load(f))
+                            exercise_level = int(level_dir.name.split("_")[1])
+                            break
+                        except:
+                            pass
+            
+            # Award XP for solving the exercise
+            if found_meta:
+                user.total_xp += found_meta.points
+            
+            # Check if ALL exercises in the current level are solved
+            current_level_dir = self.exercises_dir / f"level_{user.current_level:02d}"
+            if current_level_dir.exists():
+                # Get all exercises in the current level
+                all_exercises = [
+                    item.name for item in current_level_dir.iterdir() 
+                    if item.is_dir() and item.name.startswith("ex")
+                ]
+                
+                # Check if all are solved
+                all_solved = True
+                for ex_id in all_exercises:
+                    if user.progress.get(ex_id) != ExerciseState.SOLVED:
+                        all_solved = False
+                        break
+                
+                # Level up only if all exercises in the level are solved
+                if all_solved and all_exercises:
+                    user.current_level += 1
 
         self.save_user(user)
         return user

@@ -18,6 +18,7 @@ class ExerciseDetailsResponse(BaseModel):
     id: str
     points: int
     subject: str
+    type: str = "python"  # Exercise type: python, kubernetes, docker, etc.
 
 class SubmissionRequest(BaseModel):
     user_id: str
@@ -44,17 +45,37 @@ async def get_status(user_id: str):
         db.save_user(user)
 
     # Determine current exercise based on level
-    # Convention: level_00 -> ex00_hello, level_01 -> ex01_...
-    # For now, we scan the directory for the first folder in the level.
+    # Find the first UNSOLVED exercise in the current level
     current_exercise_id = None
     level_dir = db.exercises_dir / f"level_{user.current_level:02d}"
     
     if level_dir.exists():
-        # Get the first directory that looks like an exercise
-        for item in level_dir.iterdir():
-            if item.is_dir() and item.name.startswith("ex"):
-                current_exercise_id = item.name
+        # Get all exercises in the level, sorted by name
+        exercises = sorted([
+            item.name for item in level_dir.iterdir() 
+            if item.is_dir() and item.name.startswith("ex")
+        ])
+        
+        # Find the first unsolved exercise
+        for ex_id in exercises:
+            ex_status = user.progress.get(ex_id)
+            if ex_status != ExerciseState.SOLVED:
+                current_exercise_id = ex_id
                 break
+        
+        # If all exercises in this level are solved, check if we should level up
+        if current_exercise_id is None and exercises:
+            # All exercises solved - this means we need to go to next level
+            # The level up should have happened in update_user_progress
+            # But let's check the next level for exercises
+            next_level_dir = db.exercises_dir / f"level_{user.current_level + 1:02d}"
+            if next_level_dir.exists():
+                next_exercises = sorted([
+                    item.name for item in next_level_dir.iterdir() 
+                    if item.is_dir() and item.name.startswith("ex")
+                ])
+                if next_exercises:
+                    current_exercise_id = next_exercises[0]
     
     return StatusResponse(
         user_id=user.user_id,
@@ -70,13 +91,14 @@ async def get_exercise(exercise_id: str):
     details = db.get_exercise_details(exercise_id)
     if not details:
         # FastAPI would typically raise HTTPException(404)
-        return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.")
+        return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.", type="python")
         
     meta = details["meta"]
     return ExerciseDetailsResponse(
         id=meta.id,
         points=meta.points,
-        subject=details["subject"]
+        subject=details["subject"],
+        type=getattr(meta, 'type', 'python')  # Get type from meta, default to python
     )
 
 @router.post("/grade", response_model=SubmissionResponse)
