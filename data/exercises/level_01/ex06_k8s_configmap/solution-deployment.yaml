@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: config-demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: config-demo
+  template:
+    metadata:
+      labels:
+        app: config-demo
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.35
+        command: ["sh", "-c", "echo DB=$DATABASE_HOST:$DATABASE_PORT ENV=$APP_ENV && sleep 3600"]
+        envFrom:
+        - configMapRef:
+            name: app-config
