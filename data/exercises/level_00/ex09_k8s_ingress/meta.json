@@ -1,0 +1,10 @@
+{
+  "id": "ex09_k8s_ingress",
+  "title": "Ingress - HTTP Routing",
+  "points": 30,
+  "requirements": ["ex04_k8s_nodeport"],
+  "type": "kubernetes",
+  "difficulty": "intermediate",
+  "estimated_time": "25 minutes",
+  "tags": ["kubernetes", "ingress", "networking", "routing"]
+}

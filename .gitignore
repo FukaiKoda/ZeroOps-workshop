@@ -38,5 +38,6 @@ ENV/
 # Project specific
 tmp/
 *.log
+*.pid
 .DS_Store
 data/users/

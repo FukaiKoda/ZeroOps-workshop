@@ -4,9 +4,11 @@ from pydantic import BaseModel
 from typing import Optional
 from ..core.database import db
 from ..models.user import ExerciseHistory, UserProfile
-from ..models.exercise import ExerciseState
+from ..models.exercise import ExerciseState, ExerciseType
+from . import auth
 
 router = APIRouter()
+router.include_router(auth.router)
 
 class StatusResponse(BaseModel):
     user_id: str
@@ -18,6 +20,7 @@ class ExerciseDetailsResponse(BaseModel):
     id: str
     points: int
     subject: str
+    type: ExerciseType = ExerciseType.DOCKER  # Exercise type: docker, kubernetes, etc.
 
 class SubmissionRequest(BaseModel):
     user_id: str
@@ -39,22 +42,46 @@ async def get_status(user_id: str):
     """
     user = db.get_user(user_id)
     if not user:
-        # Auto-register user
-        user = UserProfile(user_id=user_id)
-        db.save_user(user)
+        # User must authenticate first
+        return StatusResponse(
+            user_id=user_id,
+            current_level=0,
+            status="error",
+            current_exercise=None
+        )
 
     # Determine current exercise based on level
-    # Convention: level_00 -> ex00_hello, level_01 -> ex01_...
-    # For now, we scan the directory for the first folder in the level.
+    # Find the first UNSOLVED exercise in the current level
     current_exercise_id = None
     level_dir = db.exercises_dir / f"level_{user.current_level:02d}"
     
     if level_dir.exists():
-        # Get the first directory that looks like an exercise
-        for item in level_dir.iterdir():
-            if item.is_dir() and item.name.startswith("ex"):
-                current_exercise_id = item.name
+        # Get all exercises in the level, sorted by name
+        exercises = sorted([
+            item.name for item in level_dir.iterdir() 
+            if item.is_dir() and item.name.startswith("ex")
+        ])
+        
+        # Find the first unsolved exercise
+        for ex_id in exercises:
+            ex_status = user.progress.get(ex_id)
+            if ex_status != ExerciseState.SOLVED:
+                current_exercise_id = ex_id
                 break
+        
+        # If all exercises in this level are solved, check if we should level up
+        if current_exercise_id is None and exercises:
+            # All exercises solved - this means we need to go to next level
+            # The level up should have happened in update_user_progress
+            # But let's check the next level for exercises
+            next_level_dir = db.exercises_dir / f"level_{user.current_level + 1:02d}"
+            if next_level_dir.exists():
+                next_exercises = sorted([
+                    item.name for item in next_level_dir.iterdir() 
+                    if item.is_dir() and item.name.startswith("ex")
+                ])
+                if next_exercises:
+                    current_exercise_id = next_exercises[0]
     
     return StatusResponse(
         user_id=user.user_id,
@@ -70,13 +97,14 @@ async def get_exercise(exercise_id: str):
     details = db.get_exercise_details(exercise_id)
     if not details:
         # FastAPI would typically raise HTTPException(404)
-        return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.")
+        return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.", type=ExerciseType.DOCKER)
         
     meta = details["meta"]
     return ExerciseDetailsResponse(
         id=meta.id,
         points=meta.points,
-        subject=details["subject"]
+        subject=details["subject"],
+        type=getattr(meta, 'type', ExerciseType.DOCKER)  # Get type from meta, default to docker
     )
 
 @router.post("/grade", response_model=SubmissionResponse)
@@ -88,10 +116,6 @@ async def submit_exercise(request: SubmissionRequest):
     user = db.get_user(request.user_id)
     if not user:
         return SubmissionResponse(status="error", message="User not found", new_level=0, score=0)
-
-    # Real grading with Docker
-    from ..workers.grader import Grader
-    grader = Grader()
     
     score = 0
     status = ExerciseState.LOCKED
@@ -117,7 +141,7 @@ async def submit_exercise(request: SubmissionRequest):
         # Use the custom grader
         try:
             # We pass the 'grader' instance and the user code (and maybe db/exercise_path if needed)
-            # The protocol is grade(grader, code, exercise_path) -> (success, message)
+            # The protocol is grade(code, exercise_path) -> (success, message)
             
             # BLOCKING CALL FIX:
             # The grading logic involves synchronous Docker calls (subprocess/sockets).
@@ -126,7 +150,6 @@ async def submit_exercise(request: SubmissionRequest):
             
             success, result_msg = await run_in_threadpool(
                 checker_module.grade, 
-                grader, 
                 request.code or "", 
                 exercise_path
             )
@@ -164,7 +187,6 @@ class LeaderboardEntry(BaseModel):
     user_id: str
     level: int
     total_xp: int
-    image_url: Optional[str] = None
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
 async def get_leaderboard():
@@ -180,8 +202,7 @@ async def get_leaderboard():
         leaderboard.append(LeaderboardEntry(
             user_id=u.user_id,
             level=u.current_level,
-            total_xp=u.total_xp,
-            image_url=u.image_url
+            total_xp=u.total_xp
         ))
     
     return leaderboard

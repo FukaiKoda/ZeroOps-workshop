@@ -44,5 +44,13 @@ class ZeroOpsClient:
         except httpx.HTTPError as e:
             return {"status": "error", "message": f"Submission failed: {str(e)}", "new_level": -1, "score": 0}
 
+    async def poll_auth(self, state: str) -> Dict[str, Any]:
+        try:
+            response = await self.client.get(f"/v1/auth/poll?state={state}")
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError:
+             return {"status": "error"}
+
     async def close(self):
         await self.client.aclose()

@@ -7,10 +7,17 @@ class ExerciseState(str, Enum):
     UNLOCKED = "unlocked"
     SOLVED = "solved"
 
+
+class ExerciseType(str, Enum):
+    DOCKER = "docker"
+    KUBERNETES = "kubernetes"
+    PROMETHEUS = "prometheus"
+    GRAFANA = "grafana"
+
 class ExerciseMetadata(BaseModel):
     id: str
     points: int
     requirements: List[str] = []
     setup_script: Optional[str] = None
     test_suite: str = "test_suite.py"
-    type: str = "python" # "python", "dockerfile", etc.
+    type: ExerciseType = ExerciseType.DOCKER # Default type

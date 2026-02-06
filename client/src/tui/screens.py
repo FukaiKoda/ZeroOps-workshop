@@ -1,9 +1,178 @@
 from textual.app import ComposeResult
 from textual.containers import Grid, Container, Vertical, ScrollableContainer
 from textual.screen import Screen, ModalScreen
-from textual.widgets import Button, Label, Header, Footer, Static, Markdown, DataTable
+from textual.widgets import Button, Label, Header, Footer, Static, Markdown, DataTable, Input
 from api.client import ZeroOpsClient
 from utils.config import settings
+import webbrowser
+import uuid
+from textual import work
+
+class LoginScreen(Screen):
+    """Screen for user authentication."""
+
+    CSS = """
+    LoginScreen {
+        align: center middle;
+    }
+
+    #login-container {
+        width: 60;
+        height: auto;
+        border: solid $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+
+    .title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 2;
+    }
+
+    .instruction {
+        margin-bottom: 2;
+        text-align: center;
+    }
+
+    #login-btn {
+        width: 100%;
+        margin-bottom: 1;
+    }
+    
+    #status-label {
+        text-align: center;
+        color: $warning;
+        margin-top: 1;
+        display: none;
+    }
+    """
+    
+    auth_state: str = ""
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Container(
+            Label("Welcome to ZeroOps", classes="title"),
+            
+            Label("Authenticate with 42 Intra to continue.", classes="instruction"),
+            Button("Login with 42 Intra", variant="primary", id="login-btn"),
+            
+            Label("Waiting for authentication...", id="status-label"),
+            
+            id="login-container"
+        )
+        yield Footer()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "login-btn":
+            # Generate unique state
+            self.auth_state = str(uuid.uuid4())
+            
+            # Open browser for authentication
+            url = f"{settings.ZEROOPS_SERVER_URL}/v1/auth/login?state={self.auth_state}"
+            webbrowser.open(url)
+            
+            # Update UI
+            self.query_one("#login-btn", Button).disabled = True
+            status_label = self.query_one("#status-label", Label)
+            status_label.styles.display = "block"
+            
+            self.notify("Browser opened. Waiting for login...", severity="information")
+            
+            # Start polling
+            self.set_interval(2.0, self.check_auth)
+
+    async def check_auth(self) -> None:
+        if not self.auth_state:
+            return
+            
+        client = ZeroOpsClient()
+        data = await client.poll_auth(self.auth_state)
+        await client.close()
+        
+        if data.get("status") == "success":
+            user_info = data.get("user", {})
+            user_id = user_info.get("user_id")
+            
+            if user_id:
+                self.notify(f"Authenticated as {user_id}!", severity="success")
+                settings.USER_ID = user_id
+                self.app.push_screen(Dashboard())
+
+
+
+class SubmissionResultScreen(ModalScreen):
+    """Modal screen to display submission results with details."""
+
+    CSS = """
+    SubmissionResultScreen {
+        align: center middle;
+    }
+
+    #result-dialog {
+        padding: 1 2;
+        width: 80;
+        height: auto;
+        max-height: 80%;
+        border: thick $background 80%;
+        background: $surface;
+    }
+
+    #result-title {
+        text-align: center;
+        text-style: bold;
+        margin-bottom: 1;
+        width: 100%;
+    }
+
+    #result-title.success {
+        color: $success;
+    }
+
+    #result-title.failure {
+        color: $error;
+    }
+
+    #result-message {
+        margin: 1 0;
+        padding: 1;
+        border: solid $primary;
+        height: auto;
+        max-height: 20;
+        overflow-y: auto;
+    }
+
+    #result-close {
+        margin-top: 1;
+        width: 100%;
+    }
+    """
+
+    def __init__(self, success: bool, message: str, exercise_id: str = ""):
+        super().__init__()
+        self.success = success
+        self.message = message
+        self.exercise_id = exercise_id
+
+    def compose(self) -> ComposeResult:
+        title_class = "success" if self.success else "failure"
+        title_text = "✅ Submission Successful!" if self.success else "❌ Submission Failed"
+        
+        yield Container(
+            Label(title_text, id="result-title", classes=title_class),
+            Label(f"Exercise: {self.exercise_id}", id="result-exercise"),
+            ScrollableContainer(
+                Static(self.message, id="result-message-text"),
+                id="result-message"
+            ),
+            Button("Close", variant="primary" if self.success else "error", id="result-close"),
+            id="result-dialog",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "result-close":
+            self.app.pop_screen()
 
 
 class QuitScreen(ModalScreen):
@@ -113,61 +282,99 @@ class Dashboard(Screen):
 
     CSS = """
     Dashboard {
-        align: center middle;
+        layout: vertical;
+        width: 100%;
+        height: 100%;
     }
     
-    #info-container {
-        width: 80%;
-        height: 80%;
-        border: solid $accent;
+    #top-bar {
+        height: auto;
+        width: 100%;
         padding: 1 2;
-        background: $surface;
-    }
-
-    .title {
-        text-align: center;
-        text-style: bold;
+        layout: vertical;
         margin-bottom: 1;
     }
 
-    .stat {
-        margin: 1 0;
+    #user-label {
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 0;
+    }
+
+    /* Level matches User color */
+    #status-label {
+        color: $accent;
+    }
+    
+    /* Exercise is Red for visibility */
+    #exercise-label {
+        color: $error;
+        text-style: italic;
     }
     
     #subject {
         height: 1fr;
+        width: 100%;
         border: solid $primary;
         margin: 1 0;
-        padding: 1;
+        padding: 1 2;
+        min-height: 10;
     }
 
     #actions {
-        layout: horizontal;
+        height: 5;
         align: center middle;
-        height: 3;
-        margin-top: 2;
+        layout: horizontal;
+        padding-bottom: 1;
+        width: 100%;
+    }
+
+    #actions Button {
+        background: $surface;
+        border: none;
+        color: cyan;
+        text-style: underline;
+        margin: 0 2;
+        min-width: 16;
+        height: auto;
+    }
+
+    #actions Button:hover {
+        color: deepskyblue;
+        text-style: bold underline;
+        background: $surface;
+    }
+
+    Markdown {
+        padding: 1;
     }
     """
 
     def compose(self) -> ComposeResult:
         yield Header()
+        
+        # Top Bar with User Info
         yield Container(
-            Label(f"Welcome, {settings.USER_ID}!", classes="title"),
-            Static("Loading status...", id="status-label", classes="stat"),
-            Static("Current Exercise: ...", id="exercise-label", classes="stat"),
-            ScrollableContainer(
-                Markdown("Loading subject...", id="subject-md"),
-                id="subject"
-            ),
-            Container(
-                Button("Refresh", variant="primary", id="refresh"),
-                Button("Submit", variant="success", id="submit"),
-                Button("Leaderboard", variant="warning", id="leaderboard"),
-                Button("Quit", variant="error", id="quit"),
-                id="actions"
-            ),
-            id="info-container"
+            Label(f"User: {settings.USER_ID}", id="user-label"),
+            Static("Level: ...", id="status-label", classes="stat"),
+            Static("Exercise: ...", id="exercise-label", classes="stat"),
+            id="top-bar"
         )
+
+        # Main Subject Area (Big Container)
+        yield ScrollableContainer(
+            Markdown("Loading subject...", id="subject-md"),
+            id="subject"
+        )
+
+        # Bottom Actions
+        yield Container(
+            Button("Submit", id="submit"),
+            Button("Leaderboard", id="leaderboard"),
+            Button("Quit", id="quit"),
+            id="actions"
+        )
+        
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -177,8 +384,6 @@ class Dashboard(Screen):
     async def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "quit":
             self.app.push_screen(QuitScreen())
-        elif event.button.id == "refresh":
-            await self.refresh_status()
         elif event.button.id == "submit":
             await self.submit_exercise()
         elif event.button.id == "leaderboard":
@@ -192,7 +397,7 @@ class Dashboard(Screen):
         if data.get("status") == "ok":
             self.query_one("#status-label", Static).update(f"Level: {data.get('current_level')}")
             ex_id = data.get('current_exercise')
-            self.query_one("#exercise-label", Static).update(f"Current Exercise: {ex_id or 'None'}")
+            self.query_one("#exercise-label", Static).update(f"Exercise: {ex_id or 'None'}")
             self.current_exercise = ex_id
             
             if ex_id:
@@ -231,22 +436,65 @@ class Dashboard(Screen):
 
         self.notify(f"Submitting {self.current_exercise}...", severity="information")
         
-        # Determine code to submit based on exercise
-        target_file = "main.py" 
-        if self.current_exercise == "ex01_docker":
-             target_file = "Dockerfile"
+        # Get exercise details to determine file type
+        client = ZeroOpsClient()
+        details = await client.get_exercise_details(self.current_exercise)
+        await client.close()
         
-        file_path = settings.RENDU_DIR / self.current_exercise / target_file
+        exercise_type = details.get("type", "python")
         
-        if not file_path.exists():
-            self.notify(f"Missing file: {target_file} in {self.current_exercise}", severity="error")
-            return
-
-        try:
-            with open(file_path, "r") as f:
-                code_to_submit = f.read()
-        except Exception as e:
-            self.notify(f"Error reading file: {e}", severity="error")
+        # Determine target files based on exercise type
+        target_files = self._get_target_files(exercise_type)
+        
+        exercise_dir = settings.RENDU_DIR / self.current_exercise
+        code_to_submit = ""
+        files_found = []
+        
+        # Collect all matching files
+        for target_file in target_files:
+            file_path = exercise_dir / target_file
+            if file_path.exists():
+                files_found.append(target_file)
+                try:
+                    with open(file_path, "r") as f:
+                        content = f.read()
+                        if code_to_submit:
+                            code_to_submit += "\n---\n"  # YAML document separator
+                        code_to_submit += content
+                except Exception as e:
+                    self.notify(f"Error reading {target_file}: {e}", severity="error")
+                    return
+        
+        # Also check for any .yaml/.yml files in kubernetes exercises
+        if exercise_type == "kubernetes":
+            for yaml_file in exercise_dir.glob("*.yaml"):
+                if yaml_file.name not in files_found:
+                    files_found.append(yaml_file.name)
+                    try:
+                        with open(yaml_file, "r") as f:
+                            content = f.read()
+                            if code_to_submit:
+                                code_to_submit += "\n---\n"
+                            code_to_submit += content
+                    except Exception as e:
+                        self.notify(f"Error reading {yaml_file.name}: {e}", severity="error")
+                        return
+            for yml_file in exercise_dir.glob("*.yml"):
+                if yml_file.name not in files_found:
+                    files_found.append(yml_file.name)
+                    try:
+                        with open(yml_file, "r") as f:
+                            content = f.read()
+                            if code_to_submit:
+                                code_to_submit += "\n---\n"
+                            code_to_submit += content
+                    except Exception as e:
+                        self.notify(f"Error reading {yml_file.name}: {e}", severity="error")
+                        return
+        
+        if not files_found:
+            expected = ", ".join(target_files)
+            self.notify(f"No files found. Expected: {expected}", severity="error")
             return
         
         client = ZeroOpsClient()
@@ -254,9 +502,37 @@ class Dashboard(Screen):
 
         await client.close()
         
-        if data.get("status") == "success":
-            self.notify(f"Success! {data.get('message')}", severity="information")
+        is_success = data.get("status") == "success"
+        message = data.get("message", "Unknown result")
+        
+        # Show detailed result in modal
+        self.app.push_screen(SubmissionResultScreen(
+            success=is_success,
+            message=message,
+            exercise_id=self.current_exercise
+        ))
+        
+        if is_success:
             await self.refresh_status()
-        else:
-            self.notify(f"Failed: {data.get('message')}", severity="error")
+
+    def _get_target_files(self, exercise_type: str) -> list:
+        """Return list of expected files based on exercise type."""
+        file_mapping = {
+            "python": ["main.py"],
+            "docker": ["Dockerfile"],
+            "kubernetes": [
+                "deployment.yaml", "service.yaml", "pod.yaml", 
+                "configmap.yaml", "secret.yaml", "ingress.yaml",
+                "pv.yaml", "pvc.yaml", "namespace.yaml", "replicaset.yaml"
+            ],
+            "docker-compose": ["docker-compose.yaml", "docker-compose.yml"],
+            "prometheus": ["prometheus.yml", "prometheus.yaml", "alerting-rules.yml"],
+            "grafana": ["dashboard.json", "datasource.yaml"],
+            "terraform": ["main.tf", "variables.tf", "outputs.tf"],
+            "ansible": ["playbook.yaml", "playbook.yml", "inventory.ini"],
+            "helm": ["Chart.yaml", "values.yaml"],
+            "shell": ["script.sh", "main.sh"],
+            "c": ["main.c", "Makefile"],
+        }
+        return file_mapping.get(exercise_type, ["main.py"])
 

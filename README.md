@@ -67,39 +67,31 @@ The server treats exercises as a Content Tree.
 ├── client/                 # Textual TUI Application
 │   ├── src/
 │   │   ├── tui/            # UI Components (Screens, Widgets)
-│   │   ├── api/            # Client-side API wrappers (Requests/Httpx)
-│   │   ├── utils/          # Local env discovery (hostname, git checks)
-│   │   └── main.py         # Entry point (zeroctl)
-│   ├── tests/
+│   │   ├── api/            # Client-side API wrappers (httpx)
+│   │   ├── utils/          # Config & signal handlers
+│   │   └── main.py         # Entry point (Typer CLI)
 │   └── pyproject.toml
 │
 ├── server/                 # FastAPI Logic
 │   ├── src/
-│   │   ├── api/            # Routes (v1/grade, v1/status)
-│   │   ├── core/           # State machine, Auth logic, Engine
-│   │   ├── models/         # Pydantic schemas (JSON validation)
-│   │   ├── workers/        # Docker interaction & Grading logic
+│   │   ├── api/            # Routes (endpoints.py, auth.py)
+│   │   ├── core/           # Database & module loader
+│   │   ├── models/         # Pydantic schemas (exercise, user)
 │   │   └── main.py         # FastAPI Entry point
-│   ├── tests/
 │   └── pyproject.toml
-│
-├── shared/                 # (Optional) Shared Pydantic models or Constants
 │
 ├── data/                   # The "Single Source of Truth"
 │   ├── exercises/          # Exercises Content Tree
-│   │   ├── level_00/
-│   │   │   └── ex00_hello/
-│   │   │       ├── meta.json
-│   │   │       ├── subject.md
-│   │   │       └── grader/ # Scripts to be mounted in Docker
-│   └── users/              # JSON "Database" storage
+│   │   └── level_00/
+│   │       ├── ex00_k8s_pods/
+│   │       │   ├── meta.json
+│   │       │   ├── subject.md
+│   │       │   ├── check.py    # Grading script
+│   │       │   └── solution.yaml
+│   │       └── ...             # More exercises
+│   └── users/              # JSON "Database" storage (gitignored)
 │
-├── docker/                 # Grading Sandbox images
-│   ├── python-runner/
-│   └── c-runner/
-│
-├── GEMINI.md
-└── Makefile                # Shortcuts for (make run-server, make run-client)
+└── Makefile                # Shortcuts for (make run-server, make run-client, make dev)
 ```
 
 ### Mechanism
