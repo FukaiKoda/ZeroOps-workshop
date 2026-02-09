@@ -1,8 +1,0 @@
-{
-  "id": "ex00_hello",
-  "points": 10,
-  "requirements": [],
-  "setup_script": "setup_hello.sh",
-  "test_suite": "test_hello.py",
-  "type": "python"
-}

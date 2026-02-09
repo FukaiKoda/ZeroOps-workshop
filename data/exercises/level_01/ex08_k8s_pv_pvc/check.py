@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex08_k8s_pv_pvc:
     Validates PV, PVC, and Pod manifests
@@ -126,5 +126,44 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
-    return True, "✅ Excellent! You've mastered persistent storage in Kubernetes!"
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check PV
+        cmd_pv = ["kubectl", "get", "pv", "data-pv", "-o", "json"]
+        res_pv = subprocess.run(cmd_pv, capture_output=True, text=True)
+        if res_pv.returncode != 0:
+            return False, "YAML is valid, but PersistentVolume 'data-pv' not found."
+            
+        # Check PVC
+        cmd_pvc = ["kubectl", "get", "pvc", "data-pvc", "-o", "json"]
+        res_pvc = subprocess.run(cmd_pvc, capture_output=True, text=True)
+        if res_pvc.returncode != 0:
+            return False, "YAML is valid, but PersistentVolumeClaim 'data-pvc' not found."
+            
+        pvc_data = json.loads(res_pvc.stdout)
+        phase = pvc_data.get("status", {}).get("phase")
+        if phase != "Bound":
+             return False, f"YAML is valid, but PVC is in '{phase}' state. It should be 'Bound'."
+             
+        # Check Pod
+        cmd_pod = ["kubectl", "get", "pod", "storage-pod", "-o", "json"]
+        res_pod = subprocess.run(cmd_pod, capture_output=True, text=True)
+        if res_pod.returncode != 0:
+             return False, "YAML is valid, but Pod 'storage-pod' not found."
+             
+        pod_data = json.loads(res_pod.stdout)
+        volumes = pod_data.get("spec", {}).get("volumes", [])
+        found_vol = any(v.get("persistentVolumeClaim", {}).get("claimName") == "data-pvc" for v in volumes)
+        if not found_vol:
+             return False, "YAML is valid, but Pod is not using the 'data-pvc' claim."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
+    return True, "✅ Fantastic! You've set up persistent storage using PV and PVC!"

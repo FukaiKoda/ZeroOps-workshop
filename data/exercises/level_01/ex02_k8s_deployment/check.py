@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex02_k8s_deployment:
     Validates the webapp-deployment.yaml manifest
@@ -78,5 +78,41 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
-    return True, "✅ Excellent! Your Deployment is production-ready with proper resource limits!"
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check if the deployment exists
+        cmd = ["kubectl", "get", "deployment", "webapp-deployment", "-o", "json"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            return False, f"YAML is valid, but Deployment 'webapp-deployment' not found. Did you apply it? (Error: {result.stderr.strip()})"
+        
+        dep_data = json.loads(result.stdout)
+        
+        # Check replicas count
+        ready_replicas = dep_data.get("status", {}).get("readyReplicas", 0)
+        if ready_replicas != 4:
+             return False, f"YAML is valid, but expected 4 ready replicas, found {ready_replicas}."
+             
+        # Check container limits in live object
+        # (This is extra verification to ensure they didn't just scale a random deployment)
+        containers = dep_data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        if containers:
+            limits = containers[0].get("resources", {}).get("limits", {})
+            if limits.get("memory") != "128Mi" or limits.get("cpu") != "250m":
+                 return False, "YAML is valid, but live Deployment resource limits do not match requirements."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
+    return True, "✅ Excellent! Your Deployment is production-ready, running, and correctly scaled!"

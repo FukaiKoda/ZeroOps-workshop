@@ -1,7 +1,7 @@
 import typer
 from textual.app import App, ComposeResult
 from utils.signals import setup_signal_handlers
-from tui.screens import QuitScreen, Dashboard
+from tui.screens import QuitScreen, Dashboard, LoginScreen
 
 app = typer.Typer()
 
@@ -16,7 +16,7 @@ class ZeroOpsApp(App):
 
     def on_mount(self) -> None:
         setup_signal_handlers(self.notify)
-        self.push_screen(Dashboard())
+        self.push_screen(LoginScreen())
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
