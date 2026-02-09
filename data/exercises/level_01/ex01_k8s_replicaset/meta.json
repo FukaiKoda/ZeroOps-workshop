@@ -1,0 +1,10 @@
+{
+  "id": "ex01_k8s_replicaset",
+  "title": "ReplicaSets - Scaling Your Pods",
+  "points": 20,
+  "requirements": ["ex00_k8s_pods"],
+  "type": "kubernetes",
+  "difficulty": "beginner",
+  "estimated_time": "15 minutes",
+  "tags": ["kubernetes", "replicaset", "scaling"]
+}

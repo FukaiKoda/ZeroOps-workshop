@@ -1,5 +1,4 @@
-[
-tool.poetry]
+[tool.poetry]
 name = "zeroops-client"
 version = "0.1.0"
 description = "ZeroOps Workshop TUI Client"

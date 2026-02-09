@@ -1,279 +1,148 @@
-"""
-Grader: High-level grading engine that processes WorkerJob objects.
-
-This is the "execution engine" that:
-1. Receives a WorkerJob (user code + exercise metadata)
-2. Prepares a temporary directory with student files
-3. Mounts it in a Docker container
-4. Runs the grading script
-5. Parses the output and returns a result
-
-Typically called by a background worker (Celery, RQ, or similar).
-"""
-
-import logging
-import json
-import re
-import shutil
+import docker
+import os
+import tarfile
+from io import BytesIO
 from pathlib import Path
-from typing import Optional
-from datetime import datetime
-
-from workers.docker_runner import DockerRunner, DockerRunnerException, create_temp_student_dir
-from workers.sandbox import get_sandbox_config, sandbox_config_to_docker_kwargs
-
-# Import schemas from shared module
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "shared"))
-from schemas import WorkerJob, WorkerJobResult, ExerciseStatus
-
-logger = logging.getLogger(__name__)
-
-
-class GraderException(Exception):
-    """Base exception for grader errors."""
-    pass
-
 
 class Grader:
-    """
-    High-level grading orchestrator.
-    
-    Usage:
-        grader = Grader()
-        result = grader.grade_submission(worker_job)
-    """
-
     def __init__(self):
-        """Initialize grader with Docker runner."""
         try:
-            self.docker_runner = DockerRunner()
-            logger.info("✅ Grader initialized")
+            self.client = docker.from_env()
         except Exception as e:
-            logger.error(f"❌ Failed to initialize Grader: {e}")
-            raise GraderException(f"Grader init failed: {e}")
+            print(f"Error connecting to Docker: {e}")
+            self.client = None
+        
+        self.runner_path = Path(__file__).parent.parent.parent.parent / "docker" / "python-runner"
 
-    def grade_submission(self, job: WorkerJob) -> WorkerJobResult:
-        """
-        Grade a single submission.
-
-        Args:
-            job: WorkerJob containing user info, exercise metadata, and files
-
-        Returns:
-            WorkerJobResult with status, output, score, etc.
-        """
-        logger.info(f"🎯 Starting grade for job: {job.job_id}")
-        logger.info(f"   User: {job.user_id}, Exercise: {job.exercise.slug}")
-
-        temp_dir = None
+    def ensure_image_exists(self, tag: str, path: Path):
+        """Ensures the runner image is built."""
+        if not self.client:
+            return False
+            
         try:
-            # Step 1: Prepare student files in a temporary directory
-            logger.info("📁 Preparing student files...")
-            files_dict = {f.filename: f.content for f in job.files}
-            temp_dir = create_temp_student_dir(files_dict)
-            logger.info(f"   Student dir: {temp_dir}")
+            self.client.images.get(tag)
+            return True
+        except docker.errors.ImageNotFound:
+            print(f"Building image {tag} from {path}...")
+            try:
+                self.client.images.build(path=str(path), tag=tag, rm=True)
+                return True
+            except Exception as e:
+                print(f"Failed to build image {tag}: {e}")
+                return False
 
-            # Step 2: Get sandbox configuration based on exercise type
-            logger.info("🔒 Loading sandbox configuration...")
-            sandbox_config = get_sandbox_config(job.docker_image)
-            sandbox_kwargs = sandbox_config_to_docker_kwargs(sandbox_config)
-            logger.info(f"   Sandbox: {job.docker_image}")
+    def run_python(self, code: str) -> tuple[int, str]:
+        """
+        Runs python code in a container and returns (exit_code, output).
+        Does NOT judge correctness.
+        """
+        if not self.client:
+            return -1, "Docker client not available. Is Docker running?"
 
-            # Step 3: Run the grading container
-            logger.info("🚀 Running grading container...")
-            output, exit_code = self._run_grader_container(
-                docker_image=job.docker_image,
-                student_code_dir=temp_dir,
-                grader_script_path=job.grader_script_path,
-                mount_path=job.mount_path,
-                timeout_seconds=job.timeout_seconds,
-                sandbox_kwargs=sandbox_kwargs,
+        image_tag = "zeroops-python-runner"
+        if not self.ensure_image_exists(image_tag, self.runner_path):
+            return -1, "Failed to build runner image."
+
+        try:
+            container = self.client.containers.create(
+                image_tag,
+                command="python main.py",
+                network_mode="none", # Internet isolation
+                mem_limit="128m",
+                cpu_period=100000,
+                cpu_quota=50000, # 0.5 CPU
             )
+            
+            # Prepare tar archive for copy
+            pw_tar_stream = BytesIO()
+            with tarfile.open(fileobj=pw_tar_stream, mode='w') as tar:
+                # Add file
+                info = tarfile.TarInfo(name='main.py')
+                info.size = len(code.encode('utf-8'))
+                tar.addfile(info, BytesIO(code.encode('utf-8')))
+            
+            pw_tar_stream.seek(0)
+            
+            # Copy file to container
+            container.put_archive('/app', pw_tar_stream)
+            
+            # Start
+            container.start()
+            
+            # Wait for finish
+            result = container.wait(timeout=5) # 5s timeout
+            
+            logs = container.logs().decode('utf-8').strip()
+            container.remove()
+            
+            return result['StatusCode'], logs
 
-            logger.info(f"✅ Container finished (exit_code: {exit_code})")
-
-            # Step 4: Parse output and determine pass/fail
-            logger.info("📊 Parsing grader output...")
-            status, score = self._parse_grader_output(output, exit_code)
-
-            # Step 5: Create result object
-            result = WorkerJobResult(
-                job_id=job.job_id,
-                user_id=job.user_id,
-                exercise_slug=job.exercise.slug,
-                status=status,
-                output_log=output,
-                exit_code=exit_code,
-                score=score,
-                timestamp=datetime.utcnow(),
-            )
-
-            logger.info(f"✅ Grading complete: {status.value} (score: {score})")
-            return result
-
-        except DockerRunnerException as e:
-            logger.error(f"❌ Docker error during grading: {e}")
-            return self._failure_result(job, f"Docker error: {e}", output="")
         except Exception as e:
-            logger.error(f"❌ Unexpected error during grading: {e}")
-            return self._failure_result(job, f"Grading error: {e}", output="")
-        finally:
-            # Cleanup: Remove temporary directory
-            if temp_dir and Path(temp_dir).exists():
-                logger.info(f"🧹 Cleaning up temp dir: {temp_dir}")
-                shutil.rmtree(temp_dir, ignore_errors=True)
+            return -1, f"Sandbox Error: {e}"
 
-    def _run_grader_container(
-        self,
-        docker_image: str,
-        student_code_dir: str,
-        grader_script_path: str,
-        mount_path: str,
-        timeout_seconds: int,
-        sandbox_kwargs: dict,
-    ) -> tuple:
-        """
-        Run the Docker container with sandbox configuration.
+    def build_dockerfile(self, dockerfile_content: str) -> tuple[bool, str]:
+        """Attempts to build a Dockerfile to verify its validity."""
+        if not self.client:
+            return False, "Docker client not available."
 
-        Args:
-            docker_image: Docker image name
-            student_code_dir: Host path to student code
-            grader_script_path: Grader script path (host file system)
-            mount_path: Where to mount student code in container
-            timeout_seconds: Container timeout
-            sandbox_kwargs: Security/resource limits
-
-        Returns:
-            (output, exit_code)
-        """
-        # Copy grader script into student temp directory
-        # (Assuming grader scripts are in data/exercises/[level]/[exercise]/grader/)
-        grader_filename = Path(grader_script_path).name
-        grader_dest = Path(student_code_dir) / "grader" / grader_filename
-        grader_dest.parent.mkdir(parents=True, exist_ok=True)
-
-        if Path(grader_script_path).exists():
-            shutil.copy2(grader_script_path, grader_dest)
-            logger.info(f"   Copied grader script: {grader_filename}")
-        else:
-            logger.warning(f"⚠️ Grader script not found: {grader_script_path}")
-            # Continue anyway; the container might have it built-in
-
-        # Build the command to run the grader
-        # Typically: python /student/grader/test.py
-        command = ["python", f"{mount_path}/grader/{grader_filename}"]
-
-        # Run container using Docker runner
-        output, exit_code = self.docker_runner.run_container(
-            image=docker_image,
-            command=command,
-            mount_source=student_code_dir,
-            mount_target=mount_path,
-            timeout_seconds=timeout_seconds,
-            env_vars={},  # Can add custom env vars here if needed
-            **sandbox_kwargs,  # Apply sandbox restrictions
-        )
-
-        return output, exit_code
-
-    @staticmethod
-    def _parse_grader_output(output: str, exit_code: int) -> tuple:
-        """
-        Parse grader output to determine pass/fail and score.
-
-        Supports multiple formats:
-        1. JSON format: {"status": "success", "score": 100}
-        2. Exit code: exit_code 0 = success, non-zero = failure
-        3. Keywords: "PASS" or "FAIL" in output
-
-        Args:
-            output: stdout+stderr from grader
-            exit_code: Container exit code
-
-        Returns:
-            (status, score): (ExerciseStatus enum, int)
-        """
-        logger.debug("📋 Parsing output...")
-
-        # Try JSON format first
+        # Create a file-like object for the build context
+        f = BytesIO(dockerfile_content.encode('utf-8'))
+        
         try:
-            # Extract JSON from output (may be mixed with other text)
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-                data = json.loads(json_str)
-                status_str = data.get("status", "failure").lower()
-                score = int(data.get("score", 0))
-                
-                status = ExerciseStatus.SUCCESS if status_str == "success" else ExerciseStatus.FAILURE
-                logger.debug(f"   ✅ Parsed JSON: status={status.value}, score={score}")
-                return status, score
-        except (json.JSONDecodeError, ValueError, AttributeError):
-            pass
+            self.client.images.build(fileobj=f, rm=True, tag="zeroops-test-build")
+            return True, "Dockerfile is valid and built successfully."
+        except docker.errors.BuildError as e:
+            # Extract build log error if possible
+            error_log = ""
+            for line in e.build_log:
+                if 'stream' in line:
+                    error_log += line['stream']
+                if 'error' in line:
+                    error_log += line['error']
+            return False, f"Build Failed: {error_log.strip()}"
+        except Exception as e:
+            return False, f"Validation Error: {str(e)}"
 
-        # Try keyword matching
-        if "PASS" in output.upper() or "SUCCESS" in output.upper():
-            logger.debug("   ✅ Found 'PASS' or 'SUCCESS' keyword")
-            return ExerciseStatus.SUCCESS, 100
-        elif "FAIL" in output.upper():
-            logger.debug("   ❌ Found 'FAIL' keyword")
-            return ExerciseStatus.FAILURE, 0
-
-        # Fallback: Check exit code
-        if exit_code == 0:
-            logger.debug("   ✅ Exit code 0 = success")
-            return ExerciseStatus.SUCCESS, 100
-        else:
-            logger.debug(f"   ❌ Exit code {exit_code} = failure")
-            return ExerciseStatus.FAILURE, 0
-
-    @staticmethod
-    def _failure_result(job: WorkerJob, error_msg: str, output: str) -> WorkerJobResult:
+    def get_expected_output(self, exercise_path: Path) -> str:
         """
-        Create a failure result.
-
-        Args:
-            job: Original WorkerJob
-            error_msg: Error message to log
-            output: Grader output (if any)
-
-        Returns:
-            WorkerJobResult with failure status
+        Gets expected output for an exercise.
+        Checks for 'expected_output.txt' in the exercise dir.
+        If missing, looks for 'solution.py', runs it, and saves the output.
         """
-        return WorkerJobResult(
-            job_id=job.job_id,
-            user_id=job.user_id,
-            exercise_slug=job.exercise.slug,
-            status=ExerciseStatus.FAILURE,
-            output_log=f"ERROR: {error_msg}\n{output}",
-            exit_code=-1,
-            score=0,
-            timestamp=datetime.utcnow(),
-        )
-
-
-# ==========================================
-# Async wrapper (for background tasks)
-# ==========================================
-
-async def grade_submission_async(job: WorkerJob) -> WorkerJobResult:
-    """
-    Async wrapper for grading (useful with Celery, asyncio, etc).
-
-    Args:
-        job: WorkerJob object
-
-    Returns:
-        WorkerJobResult
-    """
-    grader = Grader()
-    return grader.grade_submission(job)
-
-
-if __name__ == "__main__":
-    # Quick test
-    logging.basicConfig(level=logging.INFO)
-    
-    grader = Grader()
-    print("✅ Grader initialized successfully")
+        output_file = exercise_path / "expected_output.txt"
+        solution_file = exercise_path / "solution.py"
+        
+        # Check if cache is valid (exists and is newer than solution)
+        if output_file.exists():
+            try:
+                if solution_file.exists() and solution_file.stat().st_mtime > output_file.stat().st_mtime:
+                    # Solution changed, invalidate cache
+                    pass
+                else:
+                    with open(output_file, "r") as f:
+                        return f.read().strip()
+            except Exception as e:
+                print(f"Error reading/validating cache {output_file}: {e}")
+        
+        # Generate cache
+        if not solution_file.exists():
+             return "" # No solution defined
+        
+        try:
+            with open(solution_file, "r") as f:
+                code = f.read()
+            
+            # Run solution (trusting our own code)
+            exit_code, output = self.run_python(code) 
+            
+            if exit_code == 0:
+                 # Success, cache the output
+                 with open(output_file, "w") as f:
+                     f.write(output)
+                 return output
+                 
+            return "" # Execution failed
+            
+        except Exception as e:
+            print(f"Error generating solution: {e}")
+            return ""

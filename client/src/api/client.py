@@ -1,61 +1,48 @@
-from typing import Dict, Any, List
 import httpx
+from typing import Optional, Dict, Any
 from utils.config import settings
-
 
 class ZeroOpsClient:
     def __init__(self):
         self.base_url = settings.ZEROOPS_SERVER_URL
-        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=10.0)
+        self.client = httpx.AsyncClient(base_url=self.base_url, timeout=5.0)
 
-    def _auth_headers(self) -> Dict[str, str]:
-        return {"Authorization": f"Bearer {settings.SESSION_TOKEN}"}
-
-    async def get_me(self) -> Dict[str, Any]:
+    async def get_status(self) -> Dict[str, Any]:
         try:
-            response = await self.client.get("/v1/me", headers=self._auth_headers())
+            response = await self.client.get(f"/v1/status/{settings.USER_ID}")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            return {"error": True, "message": f"Connection error: {e}"}
+            return {"status": "error", "message": f"Connection error: {e}"}
 
-    async def get_next_exercise(self) -> Dict[str, Any]:
+    async def get_exercise_details(self, exercise_id: str) -> Dict[str, Any]:
         try:
-            response = await self.client.get("/v1/exercise", headers=self._auth_headers())
+            response = await self.client.get(f"/v1/exercises/{exercise_id}")
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            return {"error": True, "message": f"Failed to load exercise: {e}"}
+             return {"id": exercise_id, "subject": f"Error loading subject: {e}", "points": 0}
 
-    async def get_exercise_details(self, exercise_slug: str) -> Dict[str, Any]:
+    async def get_leaderboard(self) -> list[Dict[str, Any]]:
         try:
-            response = await self.client.get(f"/v1/exercises/{exercise_slug}")
-            response.raise_for_status()
+            response = await self.client.get("/v1/leaderboard")
+            response.json() # Verify it renders
             return response.json()
-        except httpx.HTTPError as e:
-            return {"error": True, "message": f"Error loading subject: {e}"}
+        except httpx.HTTPError:
+            return []
 
-    async def submit_exercise(self, exercise_slug: str, files: List[Dict[str, str]]) -> Dict[str, Any]:
+    async def submit_exercise(self, exercise_id: str, code: str = "") -> Dict[str, Any]:
         payload = {
-            "session_token": settings.SESSION_TOKEN,
-            "exercise_slug": exercise_slug,
-            "files": files,
-            "client_version": settings.CLIENT_VERSION,
+            "user_id": settings.USER_ID,
+            "exercise_id": exercise_id,
+            "code": code
         }
         try:
-            response = await self.client.post("/v1/submit", json=payload)
+            response = await self.client.post("/v1/grade", json=payload)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            return {"error": True, "message": f"Submission failed: {str(e)}"}
-
-    async def get_job_status(self, job_id: str) -> Dict[str, Any]:
-        try:
-            response = await self.client.get(f"/v1/status/{job_id}")
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPError as e:
-            return {"error": True, "message": f"Status check failed: {e}"}
+            return {"status": "error", "message": f"Submission failed: {str(e)}", "new_level": -1, "score": 0}
 
     async def close(self):
         await self.client.aclose()

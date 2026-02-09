@@ -9,13 +9,19 @@ This is the TUI client for the ZeroOps platform.
 
 ## Installation
 
-1. Navigate to the client directory:
-   - `cd client`
-2. Install the dependencies:
-   - `poetry install`
+1.  Navigate to the `client` directory:
+    ```bash
+    cd client
+    ```
+2.  Install the dependencies:
+    ```bash
+    poetry install
+    ```
 
 ## Running the client
 
-To run the client, execute the following command from within the client directory:
+To run the client, execute the following command from within the `client` directory:
 
-- `poetry run python src/main.py`
+```bash
+poetry run python src/main.py
+```
