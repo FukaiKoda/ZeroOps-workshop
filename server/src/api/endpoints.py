@@ -93,14 +93,14 @@ async def get_exercise(request: Request, exercise_id: str):
     details = db.get_exercise_details(exercise_id)
     if not details:
         # FastAPI would typically raise HTTPException(404)
-        return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.", type=ExerciseType.DOCKER)
+        return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.", type="python")
         
     meta = details["meta"]
     return ExerciseDetailsResponse(
         id=meta.id,
         points=meta.points,
         subject=details["subject"],
-        type=getattr(meta, 'type', ExerciseType.DOCKER)  # Get type from meta, default to docker
+        type=getattr(meta, 'type', 'python')
     )
 
 @router.post("/grade", response_model=SubmissionResponse)
