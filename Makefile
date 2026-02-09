@@ -23,7 +23,8 @@ dev:
 	@echo "Starting Client..."
 	@-cd client && poetry run python src/main.py tui
 	@echo "Stopping Server..."
-	@kill `cat .server.pid` && rm .server.pid
+	@-kill `cat .server.pid` 2>/dev/null || true
+	@rm -f .server.pid
 
 test-health:
 	@echo "Testing Health Endpoint..."

@@ -6,6 +6,7 @@ class ExerciseState(str, Enum):
     LOCKED = "locked"
     UNLOCKED = "unlocked"
     SOLVED = "solved"
+    FAILED = "failed"
 
 
 class ExerciseType(str, Enum):
@@ -13,6 +14,7 @@ class ExerciseType(str, Enum):
     KUBERNETES = "kubernetes"
     PROMETHEUS = "prometheus"
     GRAFANA = "grafana"
+    INTERACTIVE = "interactive"
 
 class ExerciseMetadata(BaseModel):
     id: str

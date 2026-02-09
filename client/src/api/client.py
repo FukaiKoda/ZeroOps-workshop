@@ -2,6 +2,8 @@ import httpx
 from typing import Optional, Dict, Any
 from utils.config import settings
 
+from utils.executor import LocalGrader
+
 class ZeroOpsClient:
     def __init__(self):
         self.base_url = settings.ZEROOPS_SERVER_URL
@@ -38,9 +40,32 @@ class ZeroOpsClient:
             "code": code
         }
         try:
+            # 1. Request Grading Script
             response = await self.client.post("/v1/grade", json=payload)
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            
+            if data.get("status") == "pending" and "script_content" in data:
+                # 2. Execute Locally
+                script = data["script_content"]
+                nonce = data["nonce"]
+                
+                success, logs = LocalGrader.execute_script(script, nonce)
+                
+                # 3. Verify Result
+                verify_payload = {
+                    "user_id": settings.USER_ID,
+                    "nonce": nonce,
+                    "result": success,
+                    "logs": logs
+                }
+                
+                verify_response = await self.client.post("/v1/verify", json=verify_payload)
+                verify_response.raise_for_status()
+                return verify_response.json()
+                
+            return data
+            
         except httpx.HTTPError as e:
             return {"status": "error", "message": f"Submission failed: {str(e)}", "new_level": -1, "score": 0}
 
