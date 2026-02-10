@@ -81,7 +81,7 @@ class LoginScreen(Screen):
             self.notify("Browser opened. Waiting for login...", severity="information")
             
             # Start polling
-            self.set_interval(2.0, self.check_auth)
+            self.auth_timer = self.set_interval(2.0, self.check_auth)
 
     async def check_auth(self) -> None:
         if not self.auth_state:
@@ -96,6 +96,10 @@ class LoginScreen(Screen):
             user_id = user_info.get("user_id")
             
             if user_id:
+                # Stop polling
+                if hasattr(self, "auth_timer"):
+                    self.auth_timer.stop()
+                    
                 self.notify(f"Authenticated as {user_id}!", severity="success")
                 settings.USER_ID = user_id
                 self.app.push_screen(Dashboard())
