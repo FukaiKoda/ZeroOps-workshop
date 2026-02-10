@@ -23,3 +23,4 @@ class UserProfile(BaseModel):
     
     # Quick lookup for exercise state
     progress: Dict[str, ExerciseState] = {}
+
