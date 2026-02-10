@@ -29,7 +29,7 @@ class ExerciseDetailsResponse(BaseModel):
 from ..models.submission import SubmissionRequest, SubmissionResponse, VerifyRequest, VerifyResponse
 
 @router.get("/status/{user_id}", response_model=StatusResponse)
-@limiter.limit("120/minute")
+@limiter.limit("240/minute")
 async def get_status(request: Request, user_id: str):
     """
     Returns the current status of the user.
@@ -85,7 +85,7 @@ async def get_status(request: Request, user_id: str):
     )
 
 @router.get("/exercises/{exercise_id}", response_model=ExerciseDetailsResponse)
-@limiter.limit("120/minute")
+@limiter.limit("240/minute")
 async def get_exercise(request: Request, exercise_id: str):
     """
     Returns the metadata and markdown subject for a specific exercise.
@@ -104,7 +104,7 @@ async def get_exercise(request: Request, exercise_id: str):
     )
 
 @router.post("/grade", response_model=SubmissionResponse)
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def submit_exercise(request: Request, submission: SubmissionRequest):
     """
     Initiates the grading process.
@@ -158,7 +158,7 @@ async def submit_exercise(request: Request, submission: SubmissionRequest):
     )
 
 @router.post("/verify", response_model=VerifyResponse)
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def verify_submission(request: Request, verification: VerifyRequest):
     """
     Verifies the result of a client-side grading execution.
@@ -211,7 +211,7 @@ class LeaderboardEntry(BaseModel):
     total_xp: int
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def get_leaderboard(request: Request):
     users = db.get_all_users()
     # Sort by XP descending, then Level descending
