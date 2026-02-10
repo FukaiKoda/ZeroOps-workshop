@@ -612,6 +612,13 @@ class Dashboard(Screen):
     }
     """
 
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        """Handle link clicks in markdown."""
+        if event.href:
+            self.notify(f"Opening {event.href}...", severity="information")
+            webbrowser.open(event.href)
+
+
     def compose(self) -> ComposeResult:
         yield Header()
         
