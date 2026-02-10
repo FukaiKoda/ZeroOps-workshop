@@ -50,7 +50,17 @@ class ZeroOpsClient:
                 script = data["script_content"]
                 nonce = data["nonce"]
                 
-                success, logs = LocalGrader.execute_script(script, nonce)
+                # Use the user's exercise directory as the execution context
+                target_dir = settings.RENDU_DIR / exercise_id
+                if not target_dir.exists():
+                     # Fallback or specific handling if needed, but executor defaults to cwd if None
+                     # However, for K8s exercises, we really want this path. 
+                     # If it doesn't exist, it might be the first run or an issue.
+                     # Let's pass it anyway if it makes sense, or check existence.
+                     # The TUI ensures the dir exists before calling submit.
+                     pass
+
+                success, logs = LocalGrader.execute_script(script, nonce, target_dir=target_dir)
                 
                 # 3. Verify Result
                 verify_payload = {

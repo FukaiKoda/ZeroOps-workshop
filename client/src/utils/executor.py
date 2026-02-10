@@ -4,37 +4,15 @@ import tempfile
 import os
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 class LocalGrader:
     @staticmethod
-    def execute_script(script_content: str, nonce: str) -> Tuple[bool, str]:
+    def execute_script(script_content: str, nonce: str, target_dir: Optional[Path] = None) -> Tuple[bool, str]:
         """
         Executes the provided python script content in a separate process.
         The script is expected to print the result to stdout or exit with a specific code.
-        For this implementation, we expect the script to have a 'grade' function,
-        but since we are running it as a script, we need to wrap it or expect it to be a standalone script.
-        
-        Wait, the server returns the content of `check.py`.
-        The `check.py` usually defines a `grade(code, path)` function.
-        
-        We need to wrap this script to make it executable. 
-        OR, we can import it dynamically if we trust it (which we do, it comes from our server).
-        
-        However, to keep it isolated, running as a subprocess is better.
-        Let's construct a wrapper script that imports `check.py` and runs it.
-        
-        Actually, let's look at `check.py` again. It has `grade(code, exercise_path)`.
-        The client doesn't have `exercise_path` in the same way the server does.
-        
-        Refactoring required: The `check.py` for client-side execution should probably not depend on server-side paths.
-        It should ideally inspect the *current directory* or a specific target.
-        
-        For now, let's assume `check.py` will be updated to be standalone or we provide a wrapper.
-        Let's write a wrapper that:
-        1. Writes `check.py` to a temp file.
-        2. Writes a `runner.py` that imports `check` and calls `grade`.
-        3. Runs `runner.py`.
+        If target_dir is provided, the script runs in that directory.
         """
         
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -93,7 +71,7 @@ except Exception as e:
                 # We run via subprocess to capture output and exit code
                 result = subprocess.run(
                     [sys.executable, str(runner_file)],
-                    cwd=os.getcwd(), # Run in user's current directory so it can find files/pods
+                    cwd=str(target_dir) if target_dir else os.getcwd(), # Run in user's exercise directory so it can find files/pods
                     capture_output=True,
                     text=True,
                     timeout=30 # 30 seconds timeout
@@ -121,4 +99,3 @@ except Exception as e:
                 return False, "Grading timed out."
             except Exception as e:
                 return False, f"Execution error: {e}"
-
