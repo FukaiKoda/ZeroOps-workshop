@@ -128,24 +128,51 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         if res_sec.returncode != 0:
             return False, "YAML is valid, but Secret 'db-credentials' not found."
             
-        # Check Deployment
-        cmd_dep = ["kubectl", "get", "deployment", "secret-demo", "-o", "json"]
-        res_dep = subprocess.run(cmd_dep, capture_output=True, text=True)
+        # Check Pod
+        cmd_pod = ["kubectl", "get", "pod", "secret-test-pod", "-o", "json"]
+        res_pod = subprocess.run(cmd_pod, capture_output=True, text=True)
         
-        if res_dep.returncode != 0:
-             return False, "YAML is valid, but Deployment 'secret-demo' not found."
+        if res_pod.returncode != 0:
+             return False, "YAML is valid, but Pod 'secret-test-pod' not found."
 
-        dep_data = json.loads(res_dep.stdout)
+        pod_data = json.loads(res_pod.stdout)
         
-        # Verify envFrom/secretRef
-        containers = dep_data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        # Verify correct image and secret usage
+        containers = pod_data.get("spec", {}).get("containers", [])
         if not containers:
-             return False, "YAML is valid, but Deployment has no containers."
+             return False, "YAML is valid, but Pod has no containers."
         
-        env_from = containers[0].get("envFrom", [])
-        found_ref = any(e.get("secretRef", {}).get("name") == "db-credentials" for e in env_from)
-        if not found_ref:
-             return False, "YAML is valid, but active Deployment is not using the 'db-credentials' Secret."
+        container = containers[0]
+        
+        # Check if secret is used (either via env or envFrom)
+        env = container.get("env", [])
+        env_from = container.get("envFrom", [])
+        
+        uses_secret = False
+        
+        # Check envFrom
+        for source in env_from:
+            if source.get("secretRef", {}).get("name") == "db-credentials":
+                uses_secret = True
+                break
+        
+        # Check env vars if not found in envFrom
+        if not uses_secret:
+            found_user = False
+            found_pass = False
+            for e in env:
+                secret_ref = e.get("valueFrom", {}).get("secretKeyRef", {})
+                if secret_ref.get("name") == "db-credentials":
+                    if secret_ref.get("key") == "DB_USERNAME":
+                        found_user = True
+                    if secret_ref.get("key") == "DB_PASSWORD":
+                        found_pass = True
+            
+            if found_user and found_pass:
+                uses_secret = True
+
+        if not uses_secret:
+             return False, "YAML is valid, but active Pod does not appear to be using the 'db-credentials' Secret correctly (checked env and envFrom)."
 
     except Exception as e:
         return False, f"System check failed: {e}"
