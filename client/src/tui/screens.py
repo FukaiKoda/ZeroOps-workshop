@@ -1,5 +1,5 @@
 from textual.app import ComposeResult
-from textual.containers import Grid, Container, Vertical, ScrollableContainer
+from textual.containers import Grid, Container, Vertical, ScrollableContainer, Center
 from textual.screen import Screen, ModalScreen
 from textual.widgets import Button, Label, Header, Footer, Static, Markdown, DataTable, Input
 from api.client import ZeroOpsClient
@@ -81,14 +81,20 @@ class LoginScreen(Screen):
             self.notify("Browser opened. Waiting for login...", severity="information")
             
             # Start polling
-            self.set_interval(2.0, self.check_auth)
+            self.poll_timer = self.set_interval(2.0, self.check_auth)
 
     async def check_auth(self) -> None:
         if not self.auth_state:
             return
             
         client = ZeroOpsClient()
-        data = await client.poll_auth(self.auth_state)
+        try:
+            data = await client.poll_auth(self.auth_state)
+        except Exception:
+            # Silently ignore polling errors
+            await client.close()
+            return
+        
         await client.close()
         
         if data.get("status") == "success":
@@ -98,7 +104,14 @@ class LoginScreen(Screen):
             if user_id:
                 self.notify(f"Authenticated as {user_id}!", severity="success")
                 settings.USER_ID = user_id
-                self.app.push_screen(Dashboard())
+                
+                # Stop polling
+                if hasattr(self, "poll_timer"):
+                    self.poll_timer.stop()
+                self.auth_state = ""
+                
+                # Switch to Dashboard (replaces LoginScreen)
+                self.app.switch_screen(Dashboard())
 
 
 
@@ -175,77 +188,7 @@ class SubmissionResultScreen(ModalScreen):
             self.app.pop_screen()
 
 
-class SubmissionResultScreen(ModalScreen):
-    """Modal screen to display submission results with details."""
 
-    CSS = """
-    SubmissionResultScreen {
-        align: center middle;
-    }
-
-    #result-dialog {
-        padding: 1 2;
-        width: 80;
-        height: auto;
-        max-height: 80%;
-        border: thick $background 80%;
-        background: $surface;
-    }
-
-    #result-title {
-        text-align: center;
-        text-style: bold;
-        margin-bottom: 1;
-        width: 100%;
-    }
-
-    #result-title.success {
-        color: $success;
-    }
-
-    #result-title.failure {
-        color: $error;
-    }
-
-    #result-message {
-        margin: 1 0;
-        padding: 1;
-        border: solid $primary;
-        height: auto;
-        max-height: 20;
-        overflow-y: auto;
-    }
-
-    #result-close {
-        margin-top: 1;
-        width: 100%;
-    }
-    """
-
-    def __init__(self, success: bool, message: str, exercise_id: str = ""):
-        super().__init__()
-        self.success = success
-        self.message = message
-        self.exercise_id = exercise_id
-
-    def compose(self) -> ComposeResult:
-        title_class = "success" if self.success else "failure"
-        title_text = "✅ Submission Successful!" if self.success else "❌ Submission Failed"
-        
-        yield Container(
-            Label(title_text, id="result-title", classes=title_class),
-            Label(f"Exercise: {self.exercise_id}", id="result-exercise"),
-            ScrollableContainer(
-                Static(self.message, id="result-message-text"),
-                id="result-message"
-            ),
-            Button("Close", variant="primary" if self.success else "error", id="result-close"),
-            id="result-dialog",
-        )
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "result-close":
-            self.app.pop_screen()
 
 
 class QuitScreen(ModalScreen):
@@ -318,19 +261,28 @@ class LeaderboardCard(Container):
         # Rank badge
         yield Label(f"#{self.rank}", classes="lb-rank")
         
+        # Rank Icons
+        icon = ""
+        if self.rank == 1:
+            icon = "👑"
+        elif self.rank == 2:
+            icon = "🥈"
+        elif self.rank == 3:
+            icon = "🥉"
+            
+        if icon:
+            yield Label(icon, classes="crown")
+
         # Avatar (Placeholder for TUI)
         # Using a large character or ASCII art. 
         # Ideally we would fetch and render the image using a library, but for stability in a standard TUI:
-        yield Label("👤", classes="lb-avatar") 
+        yield Center(Label("👤", classes="lb-avatar")) 
         
         # User Info
-        yield Label(f"@{self.user_id}", classes="lb-user")
+        yield Label(f"{self.user_id}", classes="lb-user")
         
         yield Label(f"{self.xp} XP", classes="lb-xp")
         yield Label(f"Level {self.level}", classes="lb-level")
-        
-        if self.rank <= 3:
-            yield Label("👑", classes="crown")
 
 
 class Leaderboard(Screen):
@@ -350,11 +302,29 @@ class Leaderboard(Screen):
         overflow-y: auto;
     }
     
+    #lb-header {
+        width: 100%;
+        height: 3;
+        align: left middle;
+    }
+
+    #back-btn {
+        width: auto;
+        border: none;
+        background: $surface;
+        color: $error;
+        text-style: underline;
+        min-width: 10;
+        height: 1;
+    }
+    
     .title {
+        width: 100%;
         text-align: center;
         text-style: bold;
         color: $accent;
-        margin-bottom: 2;
+        margin-bottom: 1;
+        content-align: center middle; 
     }
     
     /* Podium Layout for Top 3 */
@@ -365,7 +335,7 @@ class Leaderboard(Screen):
         align: center bottom;
         margin-bottom: 2;
     }
-    
+
     /* Grid for the rest */
     #rest-list {
         layout: grid;
@@ -377,6 +347,7 @@ class Leaderboard(Screen):
     
     /* Card Styling */
     .lb-card {
+        layout: vertical;
         border: solid $primary;
         background: $surface;
         padding: 1;
@@ -396,7 +367,7 @@ class Leaderboard(Screen):
     .lb-avatar {
         text-align: center;
         color: $accent;
-        margin-bottom: 1;
+        margin: 0 0 1 0;
         text-style: bold;
         border: round $accent;
         padding: 1 2;
@@ -406,17 +377,23 @@ class Leaderboard(Screen):
     }
     
     .lb-user {
+        width: 100%;
+        text-align: center;
         color: $accent;
         text-style: bold;
         margin-bottom: 0;
     }
     
     .lb-xp {
+        width: 100%;
+        text-align: center;
         color: white;
         text-style: bold;
     }
     
     .lb-level {
+        width: 100%;
+        text-align: center;
         color: $text-muted;
     }
     
@@ -458,9 +435,13 @@ class Leaderboard(Screen):
     
     .rank-3 .lb-rank { background: #cd7f32; color: black; }
     .rank-3 .lb-avatar { border: round #cd7f32; color: #cd7f32; }
-    .rank-3 .crown { display: block; color: #cd7f32; margin-bottom: 1; }
+    .rank-3 .crown { display: block; color: #cd7f32; margin-bottom: 0; }
     
-    .crown { display: none; }
+    .crown { 
+        display: none; 
+        width: 100%;
+        text-align: center;
+    }
     
     .rank-other {
         height: 14;
@@ -475,15 +456,17 @@ class Leaderboard(Screen):
     """
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        # yield Header() # Optional: keeping or removing based on preference, but user focused on "Global Leaderboard" title placement.
+        # I will keep Header() as it is standard, but my custom header is below it.
+        yield Header() 
         yield Container(
+            Container(
+                Button("← Back", variant="default", id="back-btn"),
+                id="lb-header"
+            ),
             Label("Global Leaderboard", classes="title"),
             Container(id="podium"),
             Container(id="rest-list"),
-            Container(
-                Button("Back", variant="primary", id="back"),
-                id="back-btn-container"
-            ),
             id="lb-container"
         )
         yield Footer()
@@ -493,8 +476,13 @@ class Leaderboard(Screen):
         rest_list = self.query_one("#rest-list")
         
         client = ZeroOpsClient()
-        data = await client.get_leaderboard()
-        await client.close()
+        try:
+            data = await client.get_leaderboard()
+        except Exception as e:
+            self.notify(f"Failed to load leaderboard: {e}", severity="error")
+            data = []
+        finally:
+            await client.close()
         
         # Sort so that rank 1 is in middle for visual podium
         # Data is already sorted by rank 1..N
@@ -547,7 +535,7 @@ class Leaderboard(Screen):
             ))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "back":
+        if event.button.id in ("back", "back-btn"):
             self.app.pop_screen()
 
 class Dashboard(Screen):
@@ -653,8 +641,13 @@ class Dashboard(Screen):
 
     async def refresh_status(self):
         client = ZeroOpsClient()
-        data = await client.get_status()
-        await client.close()
+        try:
+            data = await client.get_status()
+        except Exception as e:
+            self.notify(f"Connection error: {e}", severity="error")
+            data = {"status": "error", "message": "Failed to connect to server."}
+        finally:
+            await client.close()
         
         if data.get("status") == "ok":
             self.query_one("#status-label", Static).update(f"Level: {data.get('current_level')}")
@@ -664,32 +657,74 @@ class Dashboard(Screen):
             
             if ex_id:
                 client = ZeroOpsClient()
-                details = await client.get_exercise_details(ex_id)
-                await client.close()
+                try:
+                    details = await client.get_exercise_details(ex_id)
+                except Exception as e:
+                    self.notify(f"Failed to load exercise details: {e}", severity="error")
+                    details = {}
+                finally:
+                    await client.close()
+                
                 self.query_one("#subject-md", Markdown).update(details.get("subject", "No subject."))
                 
-                # Workspace Management
-                # Create ~/rendudevops if not exists
-                if not settings.RENDU_DIR.exists():
-                     try:
-                         settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
-                         self.notify(f"Created workspace at {settings.RENDU_DIR}", severity="information")
-                     except Exception as e:
-                         self.notify(f"Could not create workspace: {e}", severity="error")
-
-                # Create exercise dir
-                ex_dir = settings.RENDU_DIR / ex_id
-                if not ex_dir.exists():
-                     try:
-                         ex_dir.mkdir(exist_ok=True)
-                         self.notify(f"Created directory for {ex_id}", severity="information")
-                     except Exception as e:
-                         self.notify(f"Could not create exercise dir: {e}", severity="error")
-
+                self._ensure_workspace_ready(ex_id)
             else:
                  self.query_one("#subject-md", Markdown).update("No active exercise.")
         else:
             self.query_one("#status-label", Static).update(f"Error: {data.get('message', 'Unknown')}")
+
+    def _ensure_workspace_ready(self, ex_id: str) -> None:
+        """Ensure local workspace directories exist."""
+        # Create ~/rendudevops if not exists
+        if not settings.RENDU_DIR.exists():
+                try:
+                    settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
+                    self.notify(f"Created workspace at {settings.RENDU_DIR}", severity="information")
+                except Exception as e:
+                    self.notify(f"Could not create workspace: {e}", severity="error")
+
+        # Create exercise dir
+        ex_dir = settings.RENDU_DIR / ex_id
+        if not ex_dir.exists():
+                try:
+                    ex_dir.mkdir(exist_ok=True)
+                    self.notify(f"Created directory for {ex_id}", severity="information")
+                except Exception as e:
+                    self.notify(f"Could not create exercise dir: {e}", severity="error")
+
+    def _collect_exercise_code(self, exercise_dir, target_files, exercise_type) -> tuple[str, list]:
+        """Read and concatenate all relevant exercise files."""
+        code_parts = []
+        files_found = []
+
+        def read_file(path):
+            try:
+                with open(path, "r") as f:
+                     return f.read()
+            except Exception as e:
+                self.notify(f"Error reading {path.name}: {e}", severity="error")
+                return None
+
+        # 1. Target files
+        for target in target_files:
+            file_path = exercise_dir / target
+            if file_path.exists():
+                files_found.append(target)
+                content = read_file(file_path)
+                if content is not None:
+                     code_parts.append(content)
+
+        # 2. Kubernetes wildcards
+        if exercise_type == "kubernetes":
+            for ext in ["*.yaml", "*.yml"]:
+                for fpath in exercise_dir.glob(ext):
+                    if fpath.name not in files_found:
+                        files_found.append(fpath.name)
+                        content = read_file(fpath)
+                        if content is not None:
+                            code_parts.append(content)
+
+        return "\n---\n".join(code_parts), files_found
 
     async def submit_exercise(self):
         if not hasattr(self, "current_exercise") or not self.current_exercise:
@@ -700,8 +735,14 @@ class Dashboard(Screen):
         
         # Get exercise details to determine file type
         client = ZeroOpsClient()
-        details = await client.get_exercise_details(self.current_exercise)
-        await client.close()
+        details = {}
+        try:
+            details = await client.get_exercise_details(self.current_exercise)
+        except Exception as e:
+            self.notify(f"Failed to get exercise details: {e}", severity="error")
+            return
+        finally:
+            await client.close()
         
         exercise_type = details.get("type", "python")
         
@@ -709,50 +750,8 @@ class Dashboard(Screen):
         target_files = self._get_target_files(exercise_type)
         
         exercise_dir = settings.RENDU_DIR / self.current_exercise
-        code_to_submit = ""
-        files_found = []
         
-        # Collect all matching files
-        for target_file in target_files:
-            file_path = exercise_dir / target_file
-            if file_path.exists():
-                files_found.append(target_file)
-                try:
-                    with open(file_path, "r") as f:
-                        content = f.read()
-                        if code_to_submit:
-                            code_to_submit += "\n---\n"  # YAML document separator
-                        code_to_submit += content
-                except Exception as e:
-                    self.notify(f"Error reading {target_file}: {e}", severity="error")
-                    return
-        
-        # Also check for any .yaml/.yml files in kubernetes exercises
-        if exercise_type == "kubernetes":
-            for yaml_file in exercise_dir.glob("*.yaml"):
-                if yaml_file.name not in files_found:
-                    files_found.append(yaml_file.name)
-                    try:
-                        with open(yaml_file, "r") as f:
-                            content = f.read()
-                            if code_to_submit:
-                                code_to_submit += "\n---\n"
-                            code_to_submit += content
-                    except Exception as e:
-                        self.notify(f"Error reading {yaml_file.name}: {e}", severity="error")
-                        return
-            for yml_file in exercise_dir.glob("*.yml"):
-                if yml_file.name not in files_found:
-                    files_found.append(yml_file.name)
-                    try:
-                        with open(yml_file, "r") as f:
-                            content = f.read()
-                            if code_to_submit:
-                                code_to_submit += "\n---\n"
-                            code_to_submit += content
-                    except Exception as e:
-                        self.notify(f"Error reading {yml_file.name}: {e}", severity="error")
-                        return
+        code_to_submit, files_found = self._collect_exercise_code(exercise_dir, target_files, exercise_type)
         
         if target_files and not files_found:
             expected = ", ".join(target_files)
@@ -760,9 +759,13 @@ class Dashboard(Screen):
             return
         
         client = ZeroOpsClient()
-        data = await client.submit_exercise(self.current_exercise, code=code_to_submit)
-
-        await client.close()
+        try:
+            data = await client.submit_exercise(self.current_exercise, code=code_to_submit)
+        except Exception as e:
+            self.notify(f"Submission failed: {e}", severity="error")
+            return
+        finally:
+            await client.close()
         
         is_success = data.get("status") == "success"
         message = data.get("message", "Unknown result")

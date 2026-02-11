@@ -217,11 +217,8 @@ async def get_leaderboard(request: Request):
     # Sort by XP descending, then Level descending
     users.sort(key=lambda u: (u.total_xp, u.current_level), reverse=True)
     
-    # Take top 10
-    top_users = users[:10]
-    
     leaderboard = []
-    for u in top_users:
+    for u in users:
         leaderboard.append(LeaderboardEntry(
             user_id=u.user_id,
             level=u.current_level,
