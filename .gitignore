@@ -41,3 +41,5 @@ tmp/
 *.pid
 .DS_Store
 data/users/
+tests/
+scripts/
