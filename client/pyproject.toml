@@ -11,8 +11,8 @@ textual = "^0.80.0"
 typer = "*"
 httpx = "^0.26.0"
 pydantic-settings = "^2.1.0"
-click = "8.1.7"
-pillow = "^12.1.0"
+pyyaml = "^6.0.3"
+
 
 [build-system]
 requires = ["poetry-core"]

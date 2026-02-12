@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex09_k8s_ingress:
     Validates Deployments, Services, and Ingress manifests
@@ -129,5 +129,41 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check Ingress
+        cmd_ing = ["kubectl", "get", "ingress", "webapp-ingress", "-o", "json"]
+        res_ing = subprocess.run(cmd_ing, capture_output=True, text=True)
+        if res_ing.returncode != 0:
+            return False, "YAML is valid, but Ingress 'webapp-ingress' not found."
+            
+        ing_data = json.loads(res_ing.stdout)
+        # Check rules
+        rules = ing_data.get("spec", {}).get("rules", [])
+        if not rules:
+             return False, "YAML is valid, but active Ingress has no rules."
+
+        # Check Services existence
+        for svc_name in ["frontend-service", "api-service"]:
+            if subprocess.run(["kubectl", "get", "service", svc_name], capture_output=True).returncode != 0:
+                 return False, f"YAML is valid, but Service '{svc_name}' not found in cluster."
+
+        # Check Deployments existence
+        for dep_name in ["frontend-deploy", "api-deploy"]:
+             if subprocess.run(["kubectl", "get", "deployment", dep_name], capture_output=True).returncode != 0:
+                 return False, f"YAML is valid, but Deployment '{dep_name}' not found in cluster."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
     return True, "✅ Fantastic! You've mastered Ingress routing to expose multiple services!"

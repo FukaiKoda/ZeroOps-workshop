@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex00_k8s_pods:
     Validates the nginx-pod.yaml manifest
@@ -10,6 +10,8 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     try:
         manifest = yaml.safe_load(code)
+        if manifest is None:
+            return False, "No YAML content found. Please ensure your file is not empty."
     except yaml.YAMLError as e:
         return False, f"Invalid YAML syntax: {e}"
     
@@ -54,4 +56,36 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
     
-    return True, "✅ Excellent! Your Pod manifest is correct. You've learned the basics of Kubernetes Pods!"
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check if the pod exists and is running
+        cmd = ["kubectl", "get", "pod", "nginx-pod", "-o", "json"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            return False, f"YAML is valid, but Pod 'nginx-pod' not found in the cluster. Did you apply it? (Error: {result.stderr.strip()})"
+        
+        pod_data = json.loads(result.stdout)
+        phase = pod_data.get("status", {}).get("phase")
+        
+        if phase != "Running":
+            return False, f"YAML is valid, but Pod 'nginx-pod' is in '{phase}' state. It should be 'Running'."
+            
+        # Verify image in the running pod (to ensure they didn't cheat by running a different pod)
+        containers = pod_data.get("spec", {}).get("containers", [])
+        if not containers or containers[0].get("image") != "nginx:1.21":
+             return False, "YAML is valid, but the running Pod has the wrong image. Expected 'nginx:1.21'."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
+    return True, "✅ Excellent! Your Pod manifest is correct AND the Pod is running."

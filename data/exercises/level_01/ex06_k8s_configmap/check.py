@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex06_k8s_configmap:
     Validates ConfigMap and Deployment manifests
@@ -92,5 +92,48 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check ConfigMap
+        cmd_cm = ["kubectl", "get", "configmap", "app-config", "-o", "json"]
+        res_cm = subprocess.run(cmd_cm, capture_output=True, text=True)
+        
+        if res_cm.returncode != 0:
+            return False, "YAML is valid, but ConfigMap 'app-config' not found."
+            
+        # Check Deployment
+        cmd_dep = ["kubectl", "get", "deployment", "config-demo", "-o", "json"]
+        res_dep = subprocess.run(cmd_dep, capture_output=True, text=True)
+        
+        if res_dep.returncode != 0:
+             return False, "YAML is valid, but Deployment 'config-demo' not found."
+
+        dep_data = json.loads(res_dep.stdout)
+        ready_replicas = dep_data.get("status", {}).get("readyReplicas", 0)
+        if ready_replicas != 2:
+             return False, f"YAML is valid, but Deployment has {ready_replicas} ready replicas. Expected 2."
+
+        # Verify envFrom is correctly propagated to the Pod spec in the Deployment
+        containers = dep_data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        if not containers:
+             return False, "YAML is valid, but Deployment has no containers."
+        
+        env_from = containers[0].get("envFrom", [])
+        found_ref = any(e.get("configMapRef", {}).get("name") == "app-config" for e in env_from)
+        if not found_ref:
+             return False, "YAML is valid, but active Deployment is not using the 'app-config' ConfigMap."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
     return True, "✅ Great work! You've learned to externalize configuration using ConfigMaps!"

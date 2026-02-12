@@ -1,3 +1,5 @@
+# Makefile for ZeroOps-workshop
+
 .PHONY: all install run-server run-client dev
 
 all: dev
@@ -7,7 +9,7 @@ install:
 	cd client && poetry install
 
 run-server:
-	cd server && poetry run uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+	cd server && poetry run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 
 run-client:
 	cd client && poetry run python src/main.py tui
@@ -21,7 +23,8 @@ dev:
 	@echo "Starting Client..."
 	@-cd client && poetry run python src/main.py tui
 	@echo "Stopping Server..."
-	@kill `cat .server.pid` && rm .server.pid
+	@-kill `cat .server.pid` 2>/dev/null || true
+	@rm -f .server.pid
 
 test-health:
 	@echo "Testing Health Endpoint..."

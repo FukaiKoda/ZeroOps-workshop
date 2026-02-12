@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex10_k8s_labels_selectors:
     Validates labeled pods manifest
@@ -74,5 +74,38 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Verify all expected pods exist and match labels
+        for pod_name, expected_labels in expected_pods.items():
+            cmd = ["kubectl", "get", "pod", pod_name, "-o", "json"]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if res.returncode != 0:
+                return False, f"YAML is valid, but Pod '{pod_name}' not found in cluster."
+                
+            pod_data = json.loads(res.stdout)
+            actual_labels = pod_data.get("metadata", {}).get("labels", {})
+            
+            for k, v in expected_labels.items():
+                if actual_labels.get(k) != v:
+                     return False, f"YAML is valid, but active Pod '{pod_name}' is missing label '{k}: {v}'."
+            
+            phase = pod_data.get("status", {}).get("phase")
+            if phase != "Running":
+                 return False, f"YAML is valid, but Pod '{pod_name}' is in '{phase}' state."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
     return True, "✅ Perfect! You've mastered labels and selectors for organizing Kubernetes resources!"

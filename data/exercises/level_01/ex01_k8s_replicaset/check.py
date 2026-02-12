@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex01_k8s_replicaset:
     Validates the nginx-replicaset.yaml manifest
@@ -66,5 +66,33 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
-    return True, "✅ Great job! Your ReplicaSet is correctly configured to maintain 3 nginx replicas!"
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check if the replicaset exists
+        cmd = ["kubectl", "get", "replicaset", "nginx-replicaset", "-o", "json"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            return False, f"YAML is valid, but ReplicaSet 'nginx-replicaset' not found. Did you apply it? (Error: {result.stderr.strip()})"
+        
+        rs_data = json.loads(result.stdout)
+        
+        # Check replicas count
+        ready_replicas = rs_data.get("status", {}).get("readyReplicas", 0)
+        if ready_replicas != 3:
+             return False, f"YAML is valid, but expected 3 ready replicas, found {ready_replicas}."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
+    return True, "✅ Great job! Your ReplicaSet is correctly configured AND running with 3 replicas!"

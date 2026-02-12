@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Tuple
 import yaml
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex04_k8s_nodeport:
     Validates the webapp-nodeport.yaml manifest
@@ -63,5 +63,42 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
-    return True, "✅ Perfect! Your NodePort Service exposes the webapp to external traffic on port 30080!"
+
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check if the service exists
+        cmd = ["kubectl", "get", "service", "webapp-nodeport", "-o", "json"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            return False, f"YAML is valid, but Service 'webapp-nodeport' not found. Did you apply it? (Error: {result.stderr.strip()})"
+        
+        svc_data = json.loads(result.stdout)
+        
+        # Check Type
+        svc_type = svc_data.get("spec", {}).get("type")
+        if svc_type != "NodePort":
+             return False, f"YAML is valid, but Service type is '{svc_type}'. Expected 'NodePort'."
+
+        # Check NodePort assignment
+        ports = svc_data.get("spec", {}).get("ports", [])
+        if not ports:
+             return False, "YAML is valid, but no ports are defined in the live Service."
+             
+        node_port = ports[0].get("nodePort")
+        if node_port != 30080:
+             return False, f"YAML is valid, but NodePort is {node_port}. Expected 30080."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
+    return True, "✅ Perfect! Your NodePort Service is active and exposing port 30080!"

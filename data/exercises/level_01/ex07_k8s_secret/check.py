@@ -3,7 +3,7 @@ from typing import Tuple
 import yaml
 import base64
 
-def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grades ex07_k8s_secret:
     Validates Secret and Pod manifests
@@ -109,5 +109,45 @@ def grade(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    
-    return True, "✅ Excellent! You've learned to securely manage sensitive data with Kubernetes Secrets!"
+        
+    # ---------------------------------------------------------
+    # System Check (Verification Phase)
+    # ---------------------------------------------------------
+    import subprocess
+    import json
+    import shutil
+
+    if not shutil.which("kubectl"):
+        return False, "Validation passed, but 'kubectl' is not installed or not in PATH. Cannot verify system state."
+
+    try:
+        # Check Secret
+        cmd_sec = ["kubectl", "get", "secret", "db-credentials", "-o", "json"]
+        res_sec = subprocess.run(cmd_sec, capture_output=True, text=True)
+        
+        if res_sec.returncode != 0:
+            return False, "YAML is valid, but Secret 'db-credentials' not found."
+            
+        # Check Deployment
+        cmd_dep = ["kubectl", "get", "deployment", "secret-demo", "-o", "json"]
+        res_dep = subprocess.run(cmd_dep, capture_output=True, text=True)
+        
+        if res_dep.returncode != 0:
+             return False, "YAML is valid, but Deployment 'secret-demo' not found."
+
+        dep_data = json.loads(res_dep.stdout)
+        
+        # Verify envFrom/secretRef
+        containers = dep_data.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        if not containers:
+             return False, "YAML is valid, but Deployment has no containers."
+        
+        env_from = containers[0].get("envFrom", [])
+        found_ref = any(e.get("secretRef", {}).get("name") == "db-credentials" for e in env_from)
+        if not found_ref:
+             return False, "YAML is valid, but active Deployment is not using the 'db-credentials' Secret."
+
+    except Exception as e:
+        return False, f"System check failed: {e}"
+
+    return True, "✅ Excellent! You've securely managed sensitive data using Secrets!"

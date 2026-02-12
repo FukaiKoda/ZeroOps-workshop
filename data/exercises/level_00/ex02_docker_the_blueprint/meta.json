@@ -1,0 +1,10 @@
+{
+  "id": "ex02_docker_the_blueprint",
+  "title": "The Blueprint",
+  "points": 15,
+  "requirements": ["ex01_docker_coming_soon"],
+  "type": "docker",
+  "auto_files": {
+    "index.html": "<!DOCTYPE html>\n<html>\n<head>\n    <title>My Custom Page</title>\n</head>\n<body>\n    <h1>Welcome to my custom web artifact!</h1>\n    <p>This page was built using Docker.</p>\n</body>\n</html>"
+  }
+}

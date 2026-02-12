@@ -1,12 +1,18 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
 from ..core.database import db
+from ..core.rate_limit import limiter
 from ..models.user import ExerciseHistory, UserProfile
-from ..models.exercise import ExerciseState
+from ..models.exercise import ExerciseState, ExerciseType
+from . import auth
 
 router = APIRouter()
+router.include_router(auth.router)
+
+# In-memory store for pending submissions (nonce -> data)
+PENDING_SUBMISSIONS = {}
 
 class StatusResponse(BaseModel):
     user_id: str
@@ -18,31 +24,26 @@ class ExerciseDetailsResponse(BaseModel):
     id: str
     points: int
     subject: str
-    type: str = "python"  # Exercise type: python, kubernetes, docker, etc.
+    type: ExerciseType = ExerciseType.DOCKER  # Exercise type: docker, kubernetes, etc.
 
-class SubmissionRequest(BaseModel):
-    user_id: str
-    exercise_id: str
-    code: Optional[str] = None  # In real world, this might be a git URL or file content
-
-class SubmissionResponse(BaseModel):
-    status: str
-    message: str
-    new_level: int
-    score: int
-
+from ..models.submission import SubmissionRequest, SubmissionResponse, VerifyRequest, VerifyResponse
 
 @router.get("/status/{user_id}", response_model=StatusResponse)
-async def get_status(user_id: str):
+@limiter.limit("240/minute")
+async def get_status(request: Request, user_id: str):
     """
     Returns the current status of the user.
     If the user does not exist, a new profile is created (for workshop simplicity).
     """
     user = db.get_user(user_id)
     if not user:
-        # Auto-register user
-        user = UserProfile(user_id=user_id)
-        db.save_user(user)
+        # User must authenticate first
+        return StatusResponse(
+            user_id=user_id,
+            current_level=0,
+            status="error",
+            current_exercise=None
+        )
 
     # Determine current exercise based on level
     # Find the first UNSOLVED exercise in the current level
@@ -84,7 +85,8 @@ async def get_status(user_id: str):
     )
 
 @router.get("/exercises/{exercise_id}", response_model=ExerciseDetailsResponse)
-async def get_exercise(exercise_id: str):
+@limiter.limit("240/minute")
+async def get_exercise(request: Request, exercise_id: str):
     """
     Returns the metadata and markdown subject for a specific exercise.
     """
@@ -98,31 +100,25 @@ async def get_exercise(exercise_id: str):
         id=meta.id,
         points=meta.points,
         subject=details["subject"],
-        type=getattr(meta, 'type', 'python')  # Get type from meta, default to python
+        type=getattr(meta, 'type', 'python')
     )
 
 @router.post("/grade", response_model=SubmissionResponse)
-async def submit_exercise(request: SubmissionRequest):
+@limiter.limit("60/minute")
+async def submit_exercise(request: Request, submission: SubmissionRequest):
     """
-    Mock grading endpoint.
-    Checks if the submission is valid for the current level.
+    Initiates the grading process.
+    Returns the grading script and a nonce for the client to execute.
     """
-    user = db.get_user(request.user_id)
+    user = db.get_user(submission.user_id)
     if not user:
         return SubmissionResponse(status="error", message="User not found", new_level=0, score=0)
-
-    # Real grading with Docker
-    from ..workers.grader import Grader
-    grader = Grader()
     
-    score = 0
-    status = ExerciseState.LOCKED
-    message = "Failed"
-
     # Dynamic Grading Logic using "Strategy Pattern"
     from ..core.loader import load_module_from_path
+    import secrets
 
-    exercise_path = db.get_exercise_path(request.exercise_id)
+    exercise_path = db.get_exercise_path(submission.exercise_id)
     if not exercise_path:
          return SubmissionResponse(
             status="error", 
@@ -132,42 +128,69 @@ async def submit_exercise(request: SubmissionRequest):
         )
 
     # Check for custom grader (check.py)
-    check_script = exercise_path / "check.py"
-    checker_module = load_module_from_path(f"check_{request.exercise_id}", check_script)
+    check_script_path = exercise_path / "check.py"
+    if not check_script_path.exists():
+        return SubmissionResponse(status="error", message="No grading logic found for this exercise.", new_level=user.current_level, score=0)
+
+    # Read the script content
+    try:
+        script_content = check_script_path.read_text()
+    except Exception as e:
+        return SubmissionResponse(status="error", message=f"Failed to read grader script: {e}", new_level=user.current_level, score=0)
+
+    # Generate a nonce
+    nonce = secrets.token_hex(16)
     
-    if checker_module and hasattr(checker_module, "grade"):
-        # Use the custom grader
-        try:
-            # We pass the 'grader' instance and the user code (and maybe db/exercise_path if needed)
-            # The protocol is grade(grader, code, exercise_path) -> (success, message)
-            
-            # BLOCKING CALL FIX:
-            # The grading logic involves synchronous Docker calls (subprocess/sockets).
-            # We must run this in a thread pool to avoid blocking the main asyncio event loop.
-            from fastapi.concurrency import run_in_threadpool
-            
-            success, result_msg = await run_in_threadpool(
-                checker_module.grade, 
-                grader, 
-                request.code or "", 
-                exercise_path
-            )
-            
-            if success:
-                 score = 100
-                 status = ExerciseState.SOLVED
-                 message = "Correct! " + result_msg
-            else:
-                 message = "Failed: " + result_msg
-                 
-        except Exception as e:
-            message = f"Grader Script Error: {e}"
+    # Store nonce in a temporary store (For simplicity, using a global dict, but in prod use Redis)
+    PENDING_SUBMISSIONS[nonce] = {
+        "user_id": submission.user_id,
+        "exercise_id": submission.exercise_id,
+        "timestamp": datetime.now()
+    }
+
+    return SubmissionResponse(
+        status="pending",
+        message="Grading script prepared. Please execute locally.",
+        new_level=user.current_level,
+        score=0,
+        script_content=script_content,
+        nonce=nonce
+    )
+
+@router.post("/verify", response_model=VerifyResponse)
+@limiter.limit("60/minute")
+async def verify_submission(request: Request, verification: VerifyRequest):
+    """
+    Verifies the result of a client-side grading execution.
+    """
+    # 1. Validate Nonce
+    if verification.nonce not in PENDING_SUBMISSIONS:
+        return VerifyResponse(status="error", message="Invalid or expired nonce.", new_level=0, score=0)
+    
+    submission_data = PENDING_SUBMISSIONS.pop(verification.nonce)
+    
+    # Check User ID match
+    if submission_data["user_id"] != verification.user_id:
+        return VerifyResponse(status="error", message="User mismatch.", new_level=0, score=0)
+    
+    user = db.get_user(verification.user_id)
+    if not user:
+        return VerifyResponse(status="error", message="User not found.", new_level=0, score=0)
+
+    score = 0
+    status = ExerciseState.FAILED
+    message = "Failed"
+
+    if verification.result:
+        score = 100
+        status = ExerciseState.SOLVED
+        message = "Correct! " + verification.logs
     else:
-        message = "No grading logic found for this exercise."
+        message = "Failed: " + verification.logs
 
     # Create history entry
     entry = ExerciseHistory(
-        ex_id=request.exercise_id,
+        ex_id=submission_data["exercise_id"],
         status=status,
         score=score,
         timestamp=datetime.now()
@@ -175,7 +198,7 @@ async def submit_exercise(request: SubmissionRequest):
 
     updated_user = db.update_user_progress(user.user_id, entry)
     
-    return SubmissionResponse(
+    return VerifyResponse(
         status="success" if score == 100 else "failure",
         message=message,
         new_level=updated_user.current_level if updated_user else user.current_level,
@@ -186,24 +209,20 @@ class LeaderboardEntry(BaseModel):
     user_id: str
     level: int
     total_xp: int
-    image_url: Optional[str] = None
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
-async def get_leaderboard():
+@limiter.limit("60/minute")
+async def get_leaderboard(request: Request):
     users = db.get_all_users()
     # Sort by XP descending, then Level descending
     users.sort(key=lambda u: (u.total_xp, u.current_level), reverse=True)
     
-    # Take top 10
-    top_users = users[:10]
-    
     leaderboard = []
-    for u in top_users:
+    for u in users:
         leaderboard.append(LeaderboardEntry(
             user_id=u.user_id,
             level=u.current_level,
-            total_xp=u.total_xp,
-            image_url=u.image_url
+            total_xp=u.total_xp
         ))
     
     return leaderboard

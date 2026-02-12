@@ -18,9 +18,9 @@ class UserProfile(BaseModel):
     user_id: str
     current_level: int = 0
     total_xp: int = 0
-    image_url: Optional[str] = None
     history: List[ExerciseHistory] = []
     session_context: Optional[SessionContext] = None
     
     # Quick lookup for exercise state
     progress: Dict[str, ExerciseState] = {}
+
