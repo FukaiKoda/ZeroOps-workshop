@@ -1,4 +1,4 @@
-# 🔬 Lab 01: The Digital Hello
+# 🔬 Lab 00: The Digital Hello
 ## "Establishing the Handshake"
 
 ## 🔑 Core Concepts

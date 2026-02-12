@@ -2,8 +2,6 @@
   "id": "ex03_docker_environment_room",
   "title": "The Environment Room",
   "points": 10,
-  "requirements": [
-    "ex03_docker_the_blueprint"
-  ],
+  "requirements": ["ex02_docker_the_blueprint"],
   "type": "interactive"
 }

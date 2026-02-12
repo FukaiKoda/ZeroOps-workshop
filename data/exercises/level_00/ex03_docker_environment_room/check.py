@@ -217,11 +217,11 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     instructions = _normalize_dockerfile(content)
 
     if not _has_from_alpine(instructions):
-        errors.append("Dockerfile must start FROM alpine (or alpine:<tag>)")
+        errors.append("your image should be based on alpine (or alpine:<tag>)")
 
     env_value = _extract_env_value(instructions, ENV_VAR)
     if env_value is None:
-        errors.append(f"Dockerfile must define ENV {ENV_VAR}={DEFAULT_VALUE}")
+        errors.append(f"Dockerfile must define ENV ")
     elif env_value != DEFAULT_VALUE:
         errors.append(f"Dockerfile ENV {ENV_VAR} must default to '{DEFAULT_VALUE}' (got '{env_value}')")
 

@@ -942,7 +942,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
 # SECTION 7: Checkpoint Graders
 # ============================================================
 
-def grade_checkpoint_compose(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade_checkpoint_compose(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Checkpoint: Verify only the docker-compose.yml structure.
     Use this before running 'docker compose up'.
@@ -995,7 +995,7 @@ def grade_checkpoint_compose(grader, code: str, exercise_path: Path) -> Tuple[bo
     return False, "\n".join(lines)
 
 
-def grade_checkpoint_services(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade_checkpoint_services(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Checkpoint: Verify services are running.
     Use this after 'docker compose up'.
@@ -1053,7 +1053,7 @@ def grade_checkpoint_services(grader, code: str, exercise_path: Path) -> Tuple[b
 # SECTION 8: Smart Grader (Auto-detect state)
 # ============================================================
 
-def grade_smart(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Smart grading that detects current state and provides appropriate feedback.
     """

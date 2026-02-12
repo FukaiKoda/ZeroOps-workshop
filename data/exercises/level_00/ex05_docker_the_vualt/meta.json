@@ -2,6 +2,9 @@
   "id": "ex05_docker_the_vualt",
   "title": "The Vault",
   "points": 20,
-  "requirements": [],
-  "type": "interactive"
+  "requirements": ["ex04_docker_shared_folder"],
+  "type": "interactive",
+  "setup_files": {
+    "init.sql": "CREATE TABLE IF NOT EXISTS submissions (\n    id SERIAL PRIMARY KEY,\n    student_name VARCHAR(100),\n    grade INTEGER,\n    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n);\n\nINSERT INTO submissions (student_name, grade) VALUES\n    ('Alice', 95),\n    ('Bob', 87),\n    ('Charlie', 92);\n"
+  }
 }

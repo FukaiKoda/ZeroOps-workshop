@@ -1,4 +1,4 @@
-"""Interactive Docker validation for Lab 02: Coming Soon.
+"""Interactive Docker validation for Lab 01: Coming Soon.
 
 Goal:
 Validate the full container lifecycle with nginx:alpine:
@@ -135,9 +135,7 @@ def _validate_proof_file(rendu_path: Path) -> Tuple[bool, List[str], List[str]]:
         errors.append("proof.txt not found in submission directory.")
         errors.append(f"  → Create it at: {proof_file}")
         errors.append("  → Save output of diagnostic commands:")
-        errors.append("    docker logs --tail 10 coming-soon >> proof.txt")
-        errors.append("    docker stats --no-stream coming-soon >> proof.txt")
-        errors.append("    docker exec coming-soon nginx -v 2>> proof.txt")
+        errors.append("    logs, stats, nginx version")
         return False, successes, errors
     
     try:
@@ -163,7 +161,6 @@ def _validate_proof_file(rendu_path: Path) -> Tuple[bool, List[str], List[str]]:
         successes.append("Logs output found in proof.txt")
     else:
         errors.append("No logs evidence found in proof.txt")
-        errors.append("  → Run: docker logs --tail 10 coming-soon >> proof.txt")
     
     # Check for stats evidence
     stats_patterns = [
@@ -180,7 +177,6 @@ def _validate_proof_file(rendu_path: Path) -> Tuple[bool, List[str], List[str]]:
         successes.append("Stats output found in proof.txt")
     else:
         errors.append("No stats evidence found in proof.txt")
-        errors.append("  → Run: docker stats --no-stream coming-soon >> proof.txt")
     
     # Check for exec evidence (nginx version)
     exec_patterns = [
@@ -193,7 +189,6 @@ def _validate_proof_file(rendu_path: Path) -> Tuple[bool, List[str], List[str]]:
         successes.append("Exec output (nginx version) found in proof.txt")
     else:
         errors.append("No exec evidence found in proof.txt")
-        errors.append("  → Run: docker exec coming-soon nginx -v >> proof.txt")
     
     valid = has_logs and has_stats and has_exec
     return valid, successes, errors
@@ -397,11 +392,6 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             # Container running, no proof.txt yet - expected state during Part B
             warnings.append("Part B: proof.txt not found yet")
             warnings.append(f"  → Save diagnostics to: {rendu_path / 'proof.txt'}")
-            warnings.append("  → Run these commands:")
-            warnings.append(f"    cd {rendu_path}")
-            warnings.append("    docker logs --tail 10 coming-soon >> proof.txt")
-            warnings.append("    docker stats --no-stream coming-soon >> proof.txt")
-            warnings.append("    docker exec coming-soon nginx -v >> proof.txt 2>&1")
         elif not container_exists and image_exists:
             all_errors.append("❌ Part B: proof.txt not found!")
             all_errors.append("  → You removed the container before saving diagnostics")
@@ -433,7 +423,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     # Determine overall status
     if part_a_complete and part_b_complete and part_c_complete:
         # Full completion!
-        success_msg = """✅ Lab 02 Complete! Full container lifecycle mastered!
+        success_msg = """✅ Lab 01 Complete! Full container lifecycle mastered!
 
 You've successfully demonstrated:
 • Pulling images (docker pull)
@@ -447,7 +437,7 @@ You've successfully demonstrated:
 
 Clean workspace confirmed - no ghost containers! 🚀
 
-➡️ Proceed to Lab 03: The Blueprint"""
+➡️ Proceed to Lab 02: The Blueprint"""
         return True, success_msg
     
     # Partial completion or errors

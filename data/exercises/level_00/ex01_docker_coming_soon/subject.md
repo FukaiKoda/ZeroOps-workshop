@@ -1,4 +1,4 @@
-# 🔬 Lab 02: Coming Soon
+# 🔬 Lab 01: Coming Soon
 ## "The Full Container Lifecycle"
 
 ## 🔑 Core Concepts
@@ -61,10 +61,10 @@ Tasks to complete:
 Save the output of diagnostic commands to `proof.txt` in your submission directory:
 
 ```bash
-cd ~/rendudevops/ex02_docker_coming_soon
-docker logs --tail 10 coming-soon >> proof.txt 2>&1
-docker stats --no-stream coming-soon >> proof.txt 2>&1
-docker exec coming-soon nginx -v >> proof.txt 2>&1
+cd ~/rendudevops/ex01_docker_coming_soon
+command to get the container logs >> proof.txt 2>&1
+command to get the container stats  >> proof.txt 2>&1
+command to get the nginx version >> proof.txt 2>&1
 ```
 
 ### Part C: Lifecycle Management
@@ -105,43 +105,8 @@ PASS: Clean workspace
 - You can combine stop and remove with `docker rm -f <container>` (force removes even if running).
 - If `docker logs` shows no output, make sure the container is running first!
 
-## 📋 Cheat Sheet
-
-| Command | What it actually does |
-|---------|----------------------|
-| `docker run -d --name X -p H:C image` | Run container in background with name X, port mapping H→C |
-| `docker logs <name>` | View container output/logs |
-| `docker logs --tail N <name>` | View last N lines of logs |
-| `docker stats <name>` | Real-time resource usage (Ctrl+C to exit) |
-| `docker stats --no-stream <name>` | One-shot resource snapshot |
-| `docker exec <name> <cmd>` | Run a command inside the container |
-| `docker exec -it <name> /bin/sh` | Open interactive shell inside container |
-| `docker stop <name>` | Gracefully stop a running container |
-| `docker start <name>` | Start a stopped container |
-| `docker rm <name>` | Remove a stopped container |
-| `docker rm -f <name>` | Force remove (even if running) |
-| `docker ps` | List running containers |
-| `docker ps -a` | List all containers (including stopped) |
-
 ## 🧠 Hints
 
 - Alpine-based images use `/bin/sh` (not `/bin/bash`).
 - `docker stats` runs until you exit (Ctrl+C).
 - `docker rm -f` force stops and removes a running container.
-
-## 📋 Cheat Sheet
-
-| Command | What it does |
-|---|---|
-| `docker run -d ...` | Runs a container in "background mode" (detached) |
-| `docker run --name X ...` | Gives your container a memorable name |
-| `docker run -p 8080:80 ...` | Maps host port 8080 → container port 80 |
-| `docker ps` | Shows only running containers |
-| `docker ps -a` | Shows all containers (including stopped "ghosts") |
-| `docker logs <name>` | Reads container stdout/stderr |
-| `docker logs -n 10 <name>` | Shows only the last 10 log lines |
-| `docker stats` | Live CPU/Memory monitor (like `top` for containers) |
-| `docker exec -it <name> sh` | Opens a shell inside a running container |
-| `docker stop <name>` | Gracefully stops a container |
-| `docker rm <name>` | Removes a stopped container |
-| `docker rm -f <name>` | Force-stops and removes a container |
