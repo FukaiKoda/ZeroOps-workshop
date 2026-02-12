@@ -1,36 +1,262 @@
 {
   "user_id": "moirhira",
   "current_level": 0,
-  "total_xp": 0,
+  "total_xp": 70,
   "history": [
     {
-      "ex_id": "ex01_docker_hello_docker",
+      "ex_id": "ex00_docker_hello_docker",
       "status": "failed",
       "score": 0,
-      "timestamp": "2026-02-12T09:26:38.641317"
+      "timestamp": "2026-02-12T19:17:11.163638"
     },
     {
       "ex_id": "ex00_docker_hello_docker",
       "status": "failed",
       "score": 0,
-      "timestamp": "2026-02-12T09:32:28.439796"
+      "timestamp": "2026-02-12T19:17:14.192850"
     },
     {
       "ex_id": "ex00_docker_hello_docker",
-      "status": "failed",
-      "score": 0,
-      "timestamp": "2026-02-12T09:40:18.626703"
+      "status": "solved",
+      "score": 100,
+      "timestamp": "2026-02-12T19:17:51.462152"
     },
     {
-      "ex_id": "ex00_docker_hello_docker",
+      "ex_id": "ex01_docker_coming_soon",
       "status": "failed",
       "score": 0,
-      "timestamp": "2026-02-12T09:44:20.868074"
+      "timestamp": "2026-02-12T19:18:58.520337"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T19:26:52.582367"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T19:27:31.411336"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T19:29:53.946630"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T19:31:34.369156"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T19:32:39.273115"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T19:33:29.499123"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T21:46:14.287582"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T21:56:55.837002"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T21:58:40.663111"
+    },
+    {
+      "ex_id": "ex01_docker_coming_soon",
+      "status": "solved",
+      "score": 100,
+      "timestamp": "2026-02-12T21:59:00.799552"
+    },
+    {
+      "ex_id": "ex02_docker_the_blueprint",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:00:27.118500"
+    },
+    {
+      "ex_id": "ex02_docker_the_blueprint",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:01:24.900164"
+    },
+    {
+      "ex_id": "ex02_docker_the_blueprint",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:03:45.038792"
+    },
+    {
+      "ex_id": "ex02_docker_the_blueprint",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:03:49.619887"
+    },
+    {
+      "ex_id": "ex02_docker_the_blueprint",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:05:31.464763"
+    },
+    {
+      "ex_id": "ex02_docker_the_blueprint",
+      "status": "solved",
+      "score": 100,
+      "timestamp": "2026-02-12T22:05:57.733392"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:09:00.990218"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:09:52.992785"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:10:05.881719"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:21:02.583329"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:22:38.444400"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:24:06.404110"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:30:14.707753"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:31:27.304900"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:32:24.088957"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:33:52.659114"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:33:57.645484"
+    },
+    {
+      "ex_id": "ex03_docker_environment_room",
+      "status": "solved",
+      "score": 100,
+      "timestamp": "2026-02-12T22:34:32.169201"
+    },
+    {
+      "ex_id": "ex04_docker_shared_folder",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:39:31.491194"
+    },
+    {
+      "ex_id": "ex04_docker_shared_folder",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:42:36.928627"
+    },
+    {
+      "ex_id": "ex04_docker_shared_folder",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:44:23.697995"
+    },
+    {
+      "ex_id": "ex04_docker_shared_folder",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:44:39.224973"
+    },
+    {
+      "ex_id": "ex04_docker_shared_folder",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T22:49:18.948929"
+    },
+    {
+      "ex_id": "ex04_docker_shared_folder",
+      "status": "solved",
+      "score": 100,
+      "timestamp": "2026-02-12T23:05:52.575223"
+    },
+    {
+      "ex_id": "ex05_docker_the_vualt",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T23:06:08.557707"
+    },
+    {
+      "ex_id": "ex05_docker_the_vualt",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T23:07:44.759688"
+    },
+    {
+      "ex_id": "ex05_docker_the_vualt",
+      "status": "failed",
+      "score": 0,
+      "timestamp": "2026-02-12T23:10:19.706430"
     }
   ],
   "session_context": null,
   "progress": {
-    "ex01_docker_hello_docker": "failed",
-    "ex00_docker_hello_docker": "failed"
+    "ex00_docker_hello_docker": "solved",
+    "ex01_docker_coming_soon": "solved",
+    "ex02_docker_the_blueprint": "solved",
+    "ex03_docker_environment_room": "solved",
+    "ex04_docker_shared_folder": "solved",
+    "ex05_docker_the_vualt": "failed"
   }
 }

@@ -1,4 +1,4 @@
-# 🔬 Lab 04: The Environment Room
+# 🔬 Lab 03: The Environment Room
 ## "Using Environment Variables"
 
 ## 🔑 Core Concepts
@@ -17,7 +17,7 @@ Build an image that uses an environment variable, then prove you can override it
 
 ## 📁 Workspace
 
-Create your submission folder:
+expected submission folder:
 
 ```
 ~/rendudevops/ex04_the_environment_room/
@@ -27,7 +27,7 @@ Create your submission folder:
 ## 🛠️ Task List
 
 - Create a `Dockerfile` based on Alpine.
-- Add a default environment variable: `ENV APP_COLOR=blue`.
+- Add a default environment variable: `APP_COLOR=blue`.
 - Add a `CMD` that prints the value and keeps the container alive:
 
 	Example (you can format it differently):
@@ -36,11 +36,7 @@ Create your submission folder:
 	CMD sh -c 'echo "APP_COLOR is: $APP_COLOR" && sleep infinity'
 	```
 
-- Build your image with the exact tag:
-
-	```bash
-	docker build -t grademe-config:v1 .
-	```
+- Build your image with the name grademe-config with exact tag v1.
 
 - Run **two** containers from the same image:
 	- One container with the default value (no overrides).

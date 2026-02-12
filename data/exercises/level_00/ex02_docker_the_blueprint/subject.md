@@ -1,4 +1,4 @@
-# 🔬 Lab 03: The Blueprint
+# 🔬 Lab 02: The Blueprint
 ## "Building Custom Frontend Artifacts"
 
 ## 🔑 Core Concepts
@@ -15,7 +15,7 @@ Write a Dockerfile to bundle a static website and document its networking requir
 
 ## 📥 Provided
 
-- A local `index.html` file.
+- A local `index.html` file (create the Dockerfile and click Submit to be created).
 
 ## 🛠️ Task List
 

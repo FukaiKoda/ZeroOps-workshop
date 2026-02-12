@@ -158,9 +158,8 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     if not ok:
         return False, (
             "Validation failed:\n"
-            f"- Missing host file: {host_index}\n"
+            f"- Missing host file: site-content/index.html\n"
             "Create it first (any HTML is fine)."
-            f" ({err})"
         )
 
     if not host_content.strip():
@@ -247,10 +246,6 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         return False, (
             "Validation failed:\n"
             "- No running nginx container found with the required bind mount.\n"
-            f"Expected a bind mount from '{expected_source}' to '{MOUNT_DEST}'."
-            f"{details}\n"
-            "Start nginx with a bind mount, for example (recommended deterministic name):\n"
-            f"  docker run -d --name {CONTAINER_NAME} -p 8080:80 -v $(pwd)/{HOST_FOLDER}:{MOUNT_DEST} nginx"
         )
 
     # Enforce the key learning: the file was edited AFTER the container started.

@@ -1,4 +1,4 @@
-# 🔬 Lab 06: The Vault
+# 🔬 Lab 05: The Vault
 ## "Persistent Data with Named Volumes"
 
 ## 🔑 Core Concepts
@@ -33,7 +33,8 @@ By the end of this lab, you should be able to:
 
 ## 📥 Provided
 
-- File: `init.sql` (creates a test table and inserts 3 rows)
+- File: `init.sql` (click Submit to be created)
+- it creates a test table and inserts 3 rows
 
 
 ## 🛠️ Task List
@@ -41,7 +42,7 @@ By the end of this lab, you should be able to:
 ### Part A: Create the Vault
 
 - Create a named volume called `grademe-db-data`.
-- Verify the volume exists using `docker volume ls`.
+- Verify the volume exists `docker ...`.
 
 ### Part B: First Database (The Original)
 

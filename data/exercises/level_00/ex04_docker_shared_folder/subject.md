@@ -1,4 +1,4 @@
-# 🔬 Lab 05: The Shared Folder
+# 🔬 Lab 04: The Shared Folder
 ## "Development Workflows & Bind Mounts"
 
 ## 🔑 Core Concepts

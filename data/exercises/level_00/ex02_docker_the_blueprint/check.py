@@ -199,7 +199,7 @@ def _validate_built_image() -> Tuple[bool, list[str]]:
     
     # Check image exists
     if not _image_exists(image_tag):
-        return False, [f"Image '{image_tag}' not found. Did you build it with: docker build -t {image_tag} ."]
+        return False, [f"Image '{image_tag}' not found. Did you build it"]
     
     # Inspect image
     ok, config, err = _inspect_image(image_tag)
