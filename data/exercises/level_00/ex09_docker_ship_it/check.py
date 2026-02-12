@@ -1105,7 +1105,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
 # SECTION 7: Checkpoint Graders
 # ============================================================
 
-def grade_checkpoint_config(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Checkpoint: Verify only configuration (before starting services).
     """
@@ -1189,7 +1189,7 @@ def grade_checkpoint_config(grader, code: str, exercise_path: Path) -> Tuple[boo
     return False, "\n".join(lines)
 
 
-def grade_checkpoint_runtime(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade_checkpoint_runtime(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Checkpoint: Verify runtime status.
     """
@@ -1259,7 +1259,7 @@ def grade_checkpoint_runtime(grader, code: str, exercise_path: Path) -> Tuple[bo
 # SECTION 8: Smart Grader
 # ============================================================
 
-def grade_smart(grader, code: str, exercise_path: Path) -> Tuple[bool, str]:
+def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Smart grading that detects current state and provides appropriate feedback.
     """

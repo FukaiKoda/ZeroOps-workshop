@@ -69,12 +69,32 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
 -   Poetry (`pip install poetry`)
 -   Docker & Kubectl (for exercises)
 
-### Quick Start
-Run everything in development mode:
-```bash
-make dev
-```
-This starts the server in the background and launches the client TUI.
+### Quick Start (Host Machine)
+1.  Install dependencies:
+    ```bash
+    cd server && poetry install
+    ```
+2.  Run the server installer:
+    ```bash
+    ./scripts/install_server.sh
+    ```
+    This sets up the systemd service and `zeroctl`.
+
+### Quick Start (Student Machine)
+1.  Install dependencies:
+    ```bash
+    cd client && poetry install
+    ```
+2.  Run the client installer:
+    ```bash
+    ./scripts/install_client.sh
+    ```
+    Enter the Host's URL when prompted (e.g., `http://192.168.1.10:8000`).
+
+3.  Launch:
+    ```bash
+    zeroctl tui
+    ```
 
 ### Testing
 -   `make test-status`: Check server connectivity.

@@ -1,4 +1,4 @@
-# 🔬 Lab 05: The Shared Folder
+# 🔬 Lab 04: The Shared Folder
 ## "Development Workflows & Bind Mounts"
 
 ## 🔑 Core Concepts
@@ -12,7 +12,7 @@ Rebuilding an image for every tiny HTML/CSS change is slow.
 
 For local development, you can **mount a host folder into the container** so that edits on your machine instantly appear inside the running container.
 
-> In production, you should use the immutable image approach (`COPY`) like in Lab 05.
+> In production, you should use the immutable image approach (`COPY`).
 
 ## 🎯 Objective
 Run an official Nginx container with a bind mount so that editing a local `index.html` immediately updates what Nginx serves—without rebuilding or restarting the container.

@@ -1,4 +1,4 @@
-# 🔬 Lab 06: The Vault
+# 🔬 Lab 05: The Vault
 ## "Persistent Data with Named Volumes"
 
 ## 🔑 Core Concepts
@@ -33,34 +33,20 @@ By the end of this lab, you should be able to:
 
 ## 📥 Provided
 
-- Docker image: `postgres:15-alpine`
-- File: `init.sql` (creates a test table and inserts 3 rows)
+- File: `init.sql` (click Submit to be created)
+- it creates a test table and inserts 3 rows
 
-`init.sql` content:
-
-```sql
-CREATE TABLE IF NOT EXISTS submissions (
-    id SERIAL PRIMARY KEY,
-    student_name VARCHAR(100),
-    grade INTEGER,
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-INSERT INTO submissions (student_name, grade) VALUES
-    ('Alice', 95),
-    ('Bob', 87),
-    ('Charlie', 92);
-```
 
 ## 🛠️ Task List
 
 ### Part A: Create the Vault
 
 - Create a named volume called `grademe-db-data`.
-- Verify the volume exists using `docker volume ls`.
+- Verify the volume exists `docker ...`.
 
 ### Part B: First Database (The Original)
 
+- pull the Docker image: `postgres:15-alpine`
 - Run a PostgreSQL container with:
   - Name: `grademe-db`
   - Volume: `grademe-db-data` mounted to `/var/lib/postgresql/data`
@@ -68,8 +54,12 @@ INSERT INTO submissions (student_name, grade) VALUES
     - `POSTGRES_PASSWORD=secretpass`
     - `POSTGRES_DB=grademe`
 - Wait ~5 seconds for PostgreSQL to initialize.
-- Copy `init.sql` into the container and execute it to create the test data.
+- Copy `init.sql` into the container and execute it to create the test data. (scrol down for hints)
 - Verify the data exists by querying the `submissions` table.
+  ```bash
+  docker exec -it grademe-db psql -U postgres -d grademe
+  SELECT * FROM submissions;
+  ```
 
 ### Part C: Destroy and Resurrect
 

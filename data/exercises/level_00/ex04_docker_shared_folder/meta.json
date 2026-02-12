@@ -2,8 +2,6 @@
   "id": "ex04_docker_shared_folder",
   "title": "The Shared Folder",
   "points": 10,
-  "requirements": [
-    "ex04_docker_environment_room"
-  ],
+  "requirements": ["ex03_docker_environment_room"],
   "type": "interactive"
 }
