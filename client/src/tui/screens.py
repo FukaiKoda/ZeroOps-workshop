@@ -102,6 +102,10 @@ class LoginScreen(Screen):
             user_id = user_info.get("user_id")
             
             if user_id:
+                # Stop polling
+                if hasattr(self, "auth_timer"):
+                    self.auth_timer.stop()
+                    
                 self.notify(f"Authenticated as {user_id}!", severity="success")
                 settings.USER_ID = user_id
                 
@@ -600,6 +604,13 @@ class Dashboard(Screen):
         padding: 1;
     }
     """
+
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        """Handle link clicks in markdown."""
+        if event.href:
+            self.notify(f"Opening {event.href}...", severity="information")
+            webbrowser.open(event.href)
+
 
     def compose(self) -> ComposeResult:
         yield Header()
