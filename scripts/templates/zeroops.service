@@ -1,0 +1,13 @@
+[Unit]
+Description=ZeroOps Workshop Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={{WORKING_DIRECTORY}}
+ExecStart={{UVICORN_CMD}} src.main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+Environment=ZEROOPS_CONFIG=%h/.config/zeroops/server.yaml
+
+[Install]
+WantedBy=default.target
