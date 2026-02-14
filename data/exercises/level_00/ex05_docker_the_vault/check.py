@@ -198,12 +198,12 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     ok, err = _volume_exists(VOLUME_NAME)
     if not ok:
         errors.append(
-            f"Named volume '{VOLUME_NAME}' not found. Create it with: docker volume create {VOLUME_NAME}"
+            f"Named volume '{VOLUME_NAME}' not found."
         )
 
     if _container_exists(OLD_CONTAINER):
         errors.append(
-            f"Container '{OLD_CONTAINER}' still exists. Remove it to prove resurrection: docker rm -f {OLD_CONTAINER}"
+            f"Container '{OLD_CONTAINER}' still exists. Remove it to prove resurrection"
         )
 
     if not _container_exists(NEW_CONTAINER):
@@ -212,7 +212,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         )
     elif not _container_running(NEW_CONTAINER):
         errors.append(
-            f"Container '{NEW_CONTAINER}' exists but is not running. Start it with: docker start {NEW_CONTAINER}"
+            f"Container '{NEW_CONTAINER}' exists but is not running."
         )
     else:
         # Container exists and is running - now verify mount and data

@@ -1,4 +1,4 @@
-# 🔬 Lab 07: The Bridge
+# 🔬 Lab 06: The Bridge
 ## "Container Communication & Networking"
 
 ## 🔑 Core Concepts
@@ -31,7 +31,6 @@ By the end of this lab, you should be able to:
 ## 📥 Provided
 
 - Docker images: `postgres:15-alpine`, `alpine`
-- Location: `~/workshop/lab-07/`
 
 ## 🛠️ Task List
 
@@ -54,7 +53,7 @@ By the end of this lab, you should be able to:
 	- Name: `grademe-api`
 	- Network: `grademe-network`
 	- Keep it running with: `sleep 3600`
-- From `grademe-api`, ping `grademe-db` by name.
+- From `grademe-api`, ping `grademe-db` by name (check Hints).
 
 ### Part C: Test Real Connectivity
 
@@ -107,7 +106,7 @@ PING grademe-db (172.xx.yy.zz): 56 data bytes
 ## 🧠 Hints
 
 - Use `docker run --network=grademe-network` to attach a container to the network.
-- Alpine ping syntax: `ping -c 3 hostname`.
+- Alpine ping syntax: `docker exec <container-name> ping -c 3 hostname`.
 - The key learning: **custom bridge networks provide name-based discovery for containers on that network**.
 
 ## 📋 Cheat Sheet

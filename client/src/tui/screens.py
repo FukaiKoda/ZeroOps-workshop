@@ -102,6 +102,10 @@ class LoginScreen(Screen):
             user_id = user_info.get("user_id")
             
             if user_id:
+                # Stop polling
+                if hasattr(self, "auth_timer"):
+                    self.auth_timer.stop()
+                    
                 self.notify(f"Authenticated as {user_id}!", severity="success")
                 settings.USER_ID = user_id
                 
@@ -556,21 +560,22 @@ class Dashboard(Screen):
         margin-bottom: 1;
     }
 
-    #user-label {
+    #user-label, #status-label {
         text-style: bold;
         color: $accent;
         margin-bottom: 0;
     }
-
-    /* Level matches User color */
-    #status-label {
-        color: $accent;
-    }
     
-    /* Exercise is Red for visibility */
     #exercise-label {
+        text-style: bold;
+        color: $success;
+        margin-bottom: 0;
+    }
+
+    #rendu-label {
+        text-style: bold;
         color: $error;
-        text-style: italic;
+        margin-bottom: 0;
     }
     
     #subject {
@@ -600,6 +605,13 @@ class Dashboard(Screen):
     }
     """
 
+    def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
+        """Handle link clicks in markdown."""
+        if event.href:
+            self.notify(f"Opening {event.href}...", severity="information")
+            webbrowser.open(event.href)
+
+
     def compose(self) -> ComposeResult:
         yield Header()
         
@@ -608,6 +620,7 @@ class Dashboard(Screen):
             Label(f"User: {settings.USER_ID}", id="user-label"),
             Static("Level: ...", id="status-label", classes="stat"),
             Static("Exercise: ...", id="exercise-label", classes="stat"),
+            Static("Rendu: ...", id="rendu-label", classes="stat"),
             id="top-bar"
         )
 
@@ -653,6 +666,7 @@ class Dashboard(Screen):
             self.query_one("#status-label", Static).update(f"Level: {data.get('current_level')}")
             ex_id = data.get('current_exercise')
             self.query_one("#exercise-label", Static).update(f"Exercise: {ex_id or 'None'}")
+            self.query_one("#rendu-label", Static).update(f"Rendu: ~/rendudevops/{ex_id or '...'}")
             self.current_exercise = ex_id
             
             if ex_id:

@@ -1,5 +1,5 @@
 {
-  "id": "ex05_docker_the_vualt",
+  "id": "ex05_docker_the_vault",
   "title": "The Vault",
   "points": 20,
   "requirements": ["ex04_docker_shared_folder"],

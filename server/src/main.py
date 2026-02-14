@@ -1,10 +1,11 @@
 from fastapi import FastAPI
+from .core.config import settings
 
 app = FastAPI(title="ZeroOps Server")
 
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "ZeroOps Server is running"}
+    return {"status": "ok", "message": "ZeroOps Server is running", "env": settings.DEBUG}
 
 @app.get("/health")
 async def health_check():
@@ -26,5 +27,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(endpoints.router, prefix="/v1")
+
 
 

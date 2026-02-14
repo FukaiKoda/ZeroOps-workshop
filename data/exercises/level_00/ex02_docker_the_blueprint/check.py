@@ -1,4 +1,4 @@
-"""Interactive Docker validation for ex03_docker_the_blueprint."""
+"""Interactive Docker validation for ex02_docker_the_blueprint."""
 
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any

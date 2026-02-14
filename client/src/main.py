@@ -16,7 +16,7 @@ class ZeroOpsApp(App):
 
     def on_mount(self) -> None:
         setup_signal_handlers(self.notify)
-        self.push_screen(LoginScreen())
+        self.push_screen(Dashboard())
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""

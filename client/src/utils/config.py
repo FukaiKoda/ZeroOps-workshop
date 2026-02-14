@@ -5,6 +5,7 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    # MANUALLY SET THIS TO YOUR HOST IP (e.g., http://192.168.1.15:8000)
     ZEROOPS_SERVER_URL: str = "http://127.0.0.1:8000"
     
     # Environment info
@@ -15,5 +16,6 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 settings = Settings()

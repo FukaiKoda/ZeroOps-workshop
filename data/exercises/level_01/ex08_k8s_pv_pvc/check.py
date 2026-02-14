@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import Tuple
 import yaml
+import shutil
+import json
+import subprocess
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """

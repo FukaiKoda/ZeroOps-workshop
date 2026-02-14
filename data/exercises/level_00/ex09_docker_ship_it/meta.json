@@ -2,6 +2,6 @@
   "id": "ex09_docker_ship_it",
   "title": "Ship It!",
   "points": 30,
-  "requirements": [],
+  "requirements": ["ex08_docker_full_stack"],
   "type": "interactive"
 }

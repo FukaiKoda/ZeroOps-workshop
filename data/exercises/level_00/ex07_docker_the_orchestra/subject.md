@@ -1,4 +1,4 @@
-# 🔬 Lab 08: The Orchestra
+# 🔬 Lab 07: The Orchestra
 ## "Introduction to Docker Compose"
 
 ## 🔑 Core Concepts
@@ -29,7 +29,7 @@ By the end of this lab, you should be able to:
 
 - Files: `index.html` (auto-created landing page)
 - Docker images: `nginx:alpine`, `postgres:15-alpine`
-- Submission directory: `~/rendudevops/ex08_docker_the_orchestra/`
+- Submission directory: `~/rendudevops/ex07_docker_the_orchestra/`
 
 **index.html** (auto-created for you):
 
@@ -54,15 +54,15 @@ By the end of this lab, you should be able to:
 	- Image: `nginx:alpine`
 	- Ports: Map host `8080` to container `80`
 	- Volumes: Bind mount `./index.html` to `/usr/share/nginx/html/index.html`
-- Start the stack with `docker compose up -d`.
+- Start the stack with `docker comp....`.
 - Verify the page is accessible:
 
 ```bash
 curl localhost:8080
 ```
 
-- View the logs with `docker compose logs`.
-- Stop and remove everything with `docker compose down`.
+- View the logs.
+- Stop and remove everything with `docker comp....`.
 
 ### Part B: Adding the Database
 
@@ -74,26 +74,13 @@ curl localhost:8080
 	- Volumes: Named volume `db-data` mounted to `/var/lib/postgresql/data`
 - Declare the named volume at the top level of your compose file.
 - Start the stack again.
-- Verify both services are running:
+- Verify both services are running
+- Check the database logs specifically
 
-```bash
-docker compose ps
-```
-
-- Check the database logs specifically:
-
-```bash
-docker compose logs db
-```
 
 ### Part C: Custom Network (Automatic!)
 
-- Inspect the network created by Compose:
-
-```bash
-docker network ls
-```
-
+- Inspect the network created by Compose.
 - Notice that Compose automatically created a network.
 - Exec into the web container and ping `db` by name:
 
@@ -128,8 +115,8 @@ Expected Output:
 
 ```text
 NAME                              STATUS
-ex08_docker_the_orchestra-web-1   Up
-ex08_docker_the_orchestra-db-1    Up
+ex07_docker_the_orchestra-web-1   Up
+ex07_docker_the_orchestra-db-1    Up
 ```
 
 ## 🧠 Hints
@@ -139,35 +126,3 @@ ex08_docker_the_orchestra-db-1    Up
 - Volume syntax in compose: `volumename:/container/path`
 - Bind mount syntax in compose: `./host/path:/container/path`
 - Don't forget to declare named volumes at the top level!
-
-## 📋 Cheat Sheet
-
-| Command | What it actually does |
-|---------|----------------------|
-| `docker compose up` | Starts all services (foreground) |
-| `docker compose up -d` | Starts all services (background/detached) |
-| `docker compose down` | Stops and removes containers, networks |
-| `docker compose down -v` | Also removes volumes (data lost!) |
-| `docker compose ps` | Shows status of all services |
-| `docker compose logs` | Shows logs from ALL services |
-| `docker compose logs web` | Shows logs from only the web service |
-docker compose logs -f	Follows logs in real-time
-docker compose exec web sh	Opens shell in the web service
-docker compose build	Rebuilds images (when using Dockerfile)
-📄 Compose File Quick Reference
-yaml
-version: '3.8'
-
-services:
-  servicename:
-    image: imagename:tag
-    ports:
-      - "host:container"
-    environment:
-      - VAR=value
-    volumes:
-      - ./local:/container    # bind mount
-      - volumename:/container # named volume
-
-volumes:
-  volumename:

@@ -2,6 +2,6 @@
   "id": "ex07_docker_the_orchestra",
   "title": "The Orchestra",
   "points": 20,
-  "requirements": [],
+  "requirements": ["ex06_docker_the_bridge"],
   "type": "interactive"
 }

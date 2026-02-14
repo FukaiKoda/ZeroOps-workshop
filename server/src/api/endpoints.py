@@ -6,10 +6,10 @@ from ..core.database import db
 from ..core.rate_limit import limiter
 from ..models.user import ExerciseHistory, UserProfile
 from ..models.exercise import ExerciseState, ExerciseType
-from . import auth
+
 
 router = APIRouter()
-router.include_router(auth.router)
+
 
 # In-memory store for pending submissions (nonce -> data)
 PENDING_SUBMISSIONS = {}
@@ -37,13 +37,9 @@ async def get_status(request: Request, user_id: str):
     """
     user = db.get_user(user_id)
     if not user:
-        # User must authenticate first
-        return StatusResponse(
-            user_id=user_id,
-            current_level=0,
-            status="error",
-            current_exercise=None
-        )
+        # Create a new user if one doesn't exist
+        user = UserProfile(user_id=user_id, current_level=0)
+        db.save_user(user)
 
     # Determine current exercise based on level
     # Find the first UNSOLVED exercise in the current level
@@ -112,7 +108,8 @@ async def submit_exercise(request: Request, submission: SubmissionRequest):
     """
     user = db.get_user(submission.user_id)
     if not user:
-        return SubmissionResponse(status="error", message="User not found", new_level=0, score=0)
+        user = UserProfile(user_id=submission.user_id, current_level=0)
+        db.save_user(user)
     
     # Dynamic Grading Logic using "Strategy Pattern"
     from ..core.loader import load_module_from_path
@@ -175,7 +172,8 @@ async def verify_submission(request: Request, verification: VerifyRequest):
     
     user = db.get_user(verification.user_id)
     if not user:
-        return VerifyResponse(status="error", message="User not found.", new_level=0, score=0)
+        user = UserProfile(user_id=verification.user_id, current_level=0)
+        db.save_user(user)
 
     score = 0
     status = ExerciseState.FAILED
