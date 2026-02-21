@@ -2,6 +2,7 @@
   "id": "ex08_docker_full_stack",
   "title": "The Full Stack",
   "points": 25,
-  "requirements": [],
+  "requirements": ["ex07_docker_the_orchestra"],
   "type": "interactive"
 }
+

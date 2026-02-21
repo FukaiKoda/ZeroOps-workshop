@@ -15,7 +15,8 @@ Write a Dockerfile to bundle a static website and document its networking requir
 
 ## 📥 Provided
 
-- A local `index.html` file (create the Dockerfile and click Submit to be created).
+- A local `index.html` file will be generated automatically after your first submission.
+
 
 ## 🛠️ Task List
 

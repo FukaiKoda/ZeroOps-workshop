@@ -4,14 +4,12 @@ from pydantic import BaseModel
 from typing import Optional
 from ..core.database import db
 from ..core.rate_limit import limiter
-from ..models.user import ExerciseHistory, UserProfile
+from ..core.config import settings
+from ..models.user import ExerciseHistory
 from ..models.exercise import ExerciseState, ExerciseType
-from . import auth
 
 router = APIRouter()
-router.include_router(auth.router)
 
-# In-memory store for pending submissions (nonce -> data)
 PENDING_SUBMISSIONS = {}
 
 class StatusResponse(BaseModel):
@@ -19,12 +17,14 @@ class StatusResponse(BaseModel):
     current_level: int
     current_exercise: Optional[str] = None
     status: str = "ok"
+    unlock_at: Optional[datetime] = None
+    server_time: datetime
 
 class ExerciseDetailsResponse(BaseModel):
     id: str
     points: int
     subject: str
-    type: ExerciseType = ExerciseType.DOCKER  # Exercise type: docker, kubernetes, etc.
+    type: ExerciseType = ExerciseType.DOCKER
 
 from ..models.submission import SubmissionRequest, SubmissionResponse, VerifyRequest, VerifyResponse
 
@@ -37,38 +37,28 @@ async def get_status(request: Request, user_id: str):
     """
     user = db.get_user(user_id)
     if not user:
-        # User must authenticate first
-        return StatusResponse(
-            user_id=user_id,
-            current_level=0,
-            status="error",
-            current_exercise=None
-        )
+        from ..models.user import UserProfile
+        user = UserProfile(user_id=user_id, current_level=0)
+        db.save_user(user)
 
-    # Determine current exercise based on level
-    # Find the first UNSOLVED exercise in the current level
     current_exercise_id = None
     level_dir = db.exercises_dir / f"level_{user.current_level:02d}"
     
+    server_time = datetime.now()
+    
     if level_dir.exists():
-        # Get all exercises in the level, sorted by name
         exercises = sorted([
             item.name for item in level_dir.iterdir() 
             if item.is_dir() and item.name.startswith("ex")
         ])
         
-        # Find the first unsolved exercise
         for ex_id in exercises:
             ex_status = user.progress.get(ex_id)
             if ex_status != ExerciseState.SOLVED:
                 current_exercise_id = ex_id
                 break
         
-        # If all exercises in this level are solved, check if we should level up
         if current_exercise_id is None and exercises:
-            # All exercises solved - this means we need to go to next level
-            # The level up should have happened in update_user_progress
-            # But let's check the next level for exercises
             next_level_dir = db.exercises_dir / f"level_{user.current_level + 1:02d}"
             if next_level_dir.exists():
                 next_exercises = sorted([
@@ -81,7 +71,8 @@ async def get_status(request: Request, user_id: str):
     return StatusResponse(
         user_id=user.user_id,
         current_level=user.current_level,
-        current_exercise=current_exercise_id
+        current_exercise=current_exercise_id,
+        server_time=server_time
     )
 
 @router.get("/exercises/{exercise_id}", response_model=ExerciseDetailsResponse)
@@ -92,7 +83,6 @@ async def get_exercise(request: Request, exercise_id: str):
     """
     details = db.get_exercise_details(exercise_id)
     if not details:
-        # FastAPI would typically raise HTTPException(404)
         return ExerciseDetailsResponse(id=exercise_id, points=0, subject="Exercise not found.", type="python")
         
     meta = details["meta"]
@@ -114,8 +104,6 @@ async def submit_exercise(request: Request, submission: SubmissionRequest):
     if not user:
         return SubmissionResponse(status="error", message="User not found", new_level=0, score=0)
     
-    # Dynamic Grading Logic using "Strategy Pattern"
-    from ..core.loader import load_module_from_path
     import secrets
 
     exercise_path = db.get_exercise_path(submission.exercise_id)
@@ -127,21 +115,17 @@ async def submit_exercise(request: Request, submission: SubmissionRequest):
             score=0
         )
 
-    # Check for custom grader (check.py)
     check_script_path = exercise_path / "check.py"
     if not check_script_path.exists():
         return SubmissionResponse(status="error", message="No grading logic found for this exercise.", new_level=user.current_level, score=0)
 
-    # Read the script content
     try:
         script_content = check_script_path.read_text()
     except Exception as e:
         return SubmissionResponse(status="error", message=f"Failed to read grader script: {e}", new_level=user.current_level, score=0)
 
-    # Generate a nonce
     nonce = secrets.token_hex(16)
     
-    # Store nonce in a temporary store (For simplicity, using a global dict, but in prod use Redis)
     PENDING_SUBMISSIONS[nonce] = {
         "user_id": submission.user_id,
         "exercise_id": submission.exercise_id,
@@ -163,13 +147,11 @@ async def verify_submission(request: Request, verification: VerifyRequest):
     """
     Verifies the result of a client-side grading execution.
     """
-    # 1. Validate Nonce
     if verification.nonce not in PENDING_SUBMISSIONS:
         return VerifyResponse(status="error", message="Invalid or expired nonce.", new_level=0, score=0)
     
     submission_data = PENDING_SUBMISSIONS.pop(verification.nonce)
     
-    # Check User ID match
     if submission_data["user_id"] != verification.user_id:
         return VerifyResponse(status="error", message="User mismatch.", new_level=0, score=0)
     
@@ -188,7 +170,6 @@ async def verify_submission(request: Request, verification: VerifyRequest):
     else:
         message = "Failed: " + verification.logs
 
-    # Create history entry
     entry = ExerciseHistory(
         ex_id=submission_data["exercise_id"],
         status=status,
@@ -214,8 +195,17 @@ class LeaderboardEntry(BaseModel):
 @limiter.limit("60/minute")
 async def get_leaderboard(request: Request):
     users = db.get_all_users()
-    # Sort by XP descending, then Level descending
-    users.sort(key=lambda u: (u.total_xp, u.current_level), reverse=True)
+    
+    def sort_key(u):
+        last_solve_ts = datetime.max
+        for entry in reversed(u.history):
+            if entry.status == "solved":
+                last_solve_ts = entry.timestamp
+                break
+
+        return (-u.total_xp, -u.current_level, last_solve_ts)
+    
+    users.sort(key=sort_key)
     
     leaderboard = []
     for u in users:

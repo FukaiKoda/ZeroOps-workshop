@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # MANUALLY SET THIS TO YOUR HOST IP (e.g., http://192.168.1.15:8000)
-    ZEROOPS_SERVER_URL: str = "http://127.0.0.1:8000"
+    ZEROOPS_SERVER_URL: str = "http://localhost:8000"
     
     # Environment info
     USER_ID: str = getpass.getuser()

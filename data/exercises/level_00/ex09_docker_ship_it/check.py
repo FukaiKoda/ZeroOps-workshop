@@ -1,5 +1,5 @@
 """
-Lab 10 Grader: Ship It!
+Lab 09 Grader: Ship It!
 Production-Ready Practices Validation
 
 Validates:
@@ -25,10 +25,10 @@ import time
 # SECTION 1: Configuration
 # ============================================================
 
-class Lab10Config:
-    """Lab 10 specific configuration."""
+class Lab09Config:
+    """Lab 09 specific configuration."""
     
-    LAB_NUMBER = "10"
+    LAB_NUMBER = "09"
     LAB_TITLE = "Ship It! (Production-Ready Practices)"
     
     # Required environment variables in .env
@@ -63,6 +63,108 @@ class Lab10Config:
 # ============================================================
 # SECTION 2: Utility Functions
 # ============================================================
+
+def _rendu_dir(exercise_path: Path) -> Path:
+    """Get the user's submission directory."""
+    return Path.home() / "rendudevops" / exercise_path.name
+
+
+# Default file contents for auto-creation (same as Lab 08)
+DEFAULT_FRONTEND_DOCKERFILE = """FROM nginx:alpine
+COPY index.html /usr/share/nginx/html/
+EXPOSE 80
+"""
+
+DEFAULT_FRONTEND_INDEX_HTML = """<!DOCTYPE html>
+<html>
+<head><title>Grade Me Portal</title></head>
+<body>
+    <h1>🎓 Grade Me Student Portal</h1>
+    <p>API Endpoint: <a href="http://localhost:5000/health">Backend Health</a></p>
+</body>
+</html>
+"""
+
+DEFAULT_BACKEND_DOCKERFILE = """FROM python:3.11-alpine
+WORKDIR /app
+RUN apk add --no-cache curl
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+EXPOSE 5000
+CMD ["python", "app.py"]
+"""
+
+DEFAULT_BACKEND_REQUIREMENTS = """flask==3.0.0
+psycopg2-binary==2.9.9
+"""
+
+DEFAULT_BACKEND_APP_PY = """from flask import Flask, jsonify
+import psycopg2
+import os
+
+app = Flask(__name__)
+
+def get_db_connection():
+    return psycopg2.connect(
+        host=os.environ.get('DB_HOST', 'db'),
+        database=os.environ.get('DB_NAME', 'grademe'),
+        user=os.environ.get('DB_USER', 'postgres'),
+        password=os.environ.get('DB_PASSWORD', 'secretpass')
+    )
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy", "service": "backend"})
+
+@app.route('/submissions')
+def submissions():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('SELECT student_name, grade FROM submissions;')
+    results = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{"name": r[0], "grade": r[1]} for r in results])
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+"""
+
+DEFAULT_DATABASE_INIT_SQL = """CREATE TABLE IF NOT EXISTS submissions (
+    id SERIAL PRIMARY KEY,
+    student_name VARCHAR(100),
+    grade INTEGER
+);
+
+INSERT INTO submissions (student_name, grade) VALUES
+    ('Alice', 95),
+    ('Bob', 87),
+    ('Charlie', 92);
+"""
+
+
+def _ensure_project_structure(rendu_path: Path) -> None:
+    """Auto-create the entire project structure if it doesn't exist."""
+    files_to_create = {
+        "frontend/Dockerfile": DEFAULT_FRONTEND_DOCKERFILE,
+        "frontend/index.html": DEFAULT_FRONTEND_INDEX_HTML,
+        "backend/Dockerfile": DEFAULT_BACKEND_DOCKERFILE,
+        "backend/requirements.txt": DEFAULT_BACKEND_REQUIREMENTS,
+        "backend/app.py": DEFAULT_BACKEND_APP_PY,
+        "database/init.sql": DEFAULT_DATABASE_INIT_SQL,
+    }
+
+    try:
+        rendu_path.mkdir(parents=True, exist_ok=True)
+        for file_path, content in files_to_create.items():
+            full_path = rendu_path / file_path
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            if not full_path.exists():
+                full_path.write_text(content)
+    except Exception:
+        pass  # Errors will be caught by verification functions
+
 
 def run_cmd(args: List[str], timeout: int = 30) -> Tuple[int, str, str]:
     """Execute command and return (exit_code, stdout, stderr)."""
@@ -284,7 +386,7 @@ def verify_env_file_content(exercise_path: Path) -> Tuple[bool, List[str]]:
             env_vars[key.strip()] = value.strip()
     
     # Check required variables
-    for var in Lab10Config.REQUIRED_ENV_VARS:
+    for var in Lab09Config.REQUIRED_ENV_VARS:
         if var not in env_vars:
             errors.append(f"Missing required variable: {var}")
         elif not env_vars[var]:
@@ -357,7 +459,7 @@ def verify_healthcheck_defined(exercise_path: Path) -> Tuple[bool, List[str]]:
     
     services = config.get("services", {})
     
-    for service_name in Lab10Config.HEALTHCHECK_SERVICES:
+    for service_name in Lab09Config.HEALTHCHECK_SERVICES:
         if service_name not in services:
             errors.append(f"Service '{service_name}' not found in compose file")
             continue
@@ -449,7 +551,7 @@ def verify_restart_policies(exercise_path: Path) -> Tuple[bool, List[str]]:
     
     services = config.get("services", {})
     
-    for service_name in Lab10Config.RESTART_SERVICES:
+    for service_name in Lab09Config.RESTART_SERVICES:
         if service_name not in services:
             continue
         
@@ -461,7 +563,7 @@ def verify_restart_policies(exercise_path: Path) -> Tuple[bool, List[str]]:
         restart_policy = deploy.get("restart_policy", {})
         deploy_condition = restart_policy.get("condition", "")
         
-        if restart not in Lab10Config.VALID_RESTART_POLICIES and not deploy_condition:
+        if restart not in Lab09Config.VALID_RESTART_POLICIES and not deploy_condition:
             errors.append(f"Service '{service_name}' has restart policy '{restart}'")
             errors.append(f"  → Add: restart: unless-stopped")
     
@@ -469,7 +571,7 @@ def verify_restart_policies(exercise_path: Path) -> Tuple[bool, List[str]]:
 
 
 def verify_resource_limits(exercise_path: Path) -> Tuple[bool, List[str]]:
-    """Verify services have resource limits defined."""
+    """Verify services have resource limits defined (memory required, CPU optional)."""
     errors = []
     warnings = []
     
@@ -480,7 +582,7 @@ def verify_resource_limits(exercise_path: Path) -> Tuple[bool, List[str]]:
     
     services = config.get("services", {})
     
-    for service_name in Lab10Config.RESOURCE_LIMIT_SERVICES:
+    for service_name in Lab09Config.RESOURCE_LIMIT_SERVICES:
         if service_name not in services:
             continue
         
@@ -495,16 +597,21 @@ def verify_resource_limits(exercise_path: Path) -> Tuple[bool, List[str]]:
             errors.append("       deploy:")
             errors.append("         resources:")
             errors.append("           limits:")
-            errors.append("             cpus: '0.5'")
             errors.append("             memory: 256M")
+            errors.append("           (cpus is optional)")
         else:
-            # Check for specific limits
-            if "cpus" not in limits and "memory" not in limits:
-                errors.append(f"Service '{service_name}' has deploy.resources.limits but no cpu/memory defined")
+            # Memory is required, CPU is optional (some kernels don't support it)
+            if "memory" not in limits:
+                errors.append(f"Service '{service_name}' missing memory limit")
+                errors.append("  → Add: memory: 256M (or similar)")
+            
+            # CPU is optional - just warn if missing
+            if "cpus" not in limits:
+                warnings.append(f"Service '{service_name}' has no CPU limit (optional, some systems don't support it)")
     
     # Check other services (warning only)
     for service_name, service in services.items():
-        if service_name in Lab10Config.RESOURCE_LIMIT_SERVICES:
+        if service_name in Lab09Config.RESOURCE_LIMIT_SERVICES:
             continue
         
         deploy = service.get("deploy", {})
@@ -559,7 +666,7 @@ def verify_services_healthy(exercise_path: Path) -> Tuple[bool, List[str]]:
         all_healthy = True
         current_errors = []
         
-        for service_name in Lab10Config.HEALTHCHECK_SERVICES:
+        for service_name in Lab09Config.HEALTHCHECK_SERVICES:
             health = get_service_health(exercise_path, service_name)
             
             if health is None:
@@ -614,8 +721,8 @@ def verify_restart_policy_works(exercise_path: Path) -> Tuple[bool, List[str]]:
     # Get restart policy
     restart_policy = data.get("HostConfig", {}).get("RestartPolicy", {}).get("Name", "no")
     
-    if restart_policy not in Lab10Config.VALID_RESTART_POLICIES:
-        errors.append(f"Backend restart policy is '{restart_policy}', expected one of {Lab10Config.VALID_RESTART_POLICIES}")
+    if restart_policy not in Lab09Config.VALID_RESTART_POLICIES:
+        errors.append(f"Backend restart policy is '{restart_policy}', expected one of {Lab09Config.VALID_RESTART_POLICIES}")
         return False, errors
     
     # Kill the container
@@ -811,8 +918,8 @@ class Task:
             return False, 0, [f"❌ {self.name}", f"   → Error: {str(e)}"]
 
 
-# Define all tasks for Lab 10
-LAB_10_TASKS = [
+# Define all tasks for Lab 09
+LAB_09_TASKS = [
     # ─────────────────────────────────────────────────────────
     # Category A: Prerequisites
     # ─────────────────────────────────────────────────────────
@@ -969,7 +1076,7 @@ LAB_10_TASKS = [
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
-    Main grading function for Lab 10: Ship It!
+    Main grading function for Lab 09: Ship It!
     
     Verifies:
     1. Environment configuration (.env + ${VAR} syntax)
@@ -979,15 +1086,19 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     5. Resource limits
     6. Runtime health and recovery
     """
+    # Auto-create project structure from Lab 08
+    rendu_path = _rendu_dir(exercise_path)
+    _ensure_project_structure(rendu_path)
+
     results = []
     total_score = 0
-    max_score = sum(t.points for t in LAB_10_TASKS)
+    max_score = sum(t.points for t in LAB_09_TASKS)
     completed_tasks = set()
     
     # Group tasks by category for display
     categories = {}
     
-    for task in LAB_10_TASKS:
+    for task in LAB_09_TASKS:
         # Check dependencies
         deps_met = all(d in completed_tasks for d in task.depends_on)
         
@@ -1021,7 +1132,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     # Header
     lines.append("╔" + "═"*62 + "╗")
-    lines.append("║" + "  Lab 10: Ship It! - Production-Ready Practices  ".center(62) + "║")
+    lines.append("║" + "  Lab 09: Ship It! - Production-Ready Practices  ".center(62) + "║")
     lines.append("╚" + "═"*62 + "╝")
     lines.append("")
     
@@ -1044,17 +1155,17 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     # Score summary
     percentage = (total_score / max_score * 100) if max_score > 0 else 0
-    passing_score = (max_score * Lab10Config.PASSING_PERCENTAGE) // 100
+    passing_score = (max_score * Lab09Config.PASSING_PERCENTAGE) // 100
     
     lines.append("═" * 64)
     lines.append(f"📊 Total Score: {total_score}/{max_score} ({percentage:.0f}%)")
-    lines.append(f"   Passing threshold: {Lab10Config.PASSING_PERCENTAGE}% ({passing_score} pts)")
+    lines.append(f"   Passing threshold: {Lab09Config.PASSING_PERCENTAGE}% ({passing_score} pts)")
     lines.append("")
     
     passed = total_score >= passing_score
     
     if passed:
-        lines.append("🎉 Lab 10 Complete! Workshop Finished!")
+        lines.append("🎉 Lab 09 Complete! Workshop Finished!")
         lines.append("")
         lines.append("Production Skills Mastered:")
         lines.append("   ✓ Environment-based configuration (.env files)")
@@ -1073,7 +1184,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         lines.append("   → Set up CI/CD pipelines with Docker")
         lines.append("   → Explore multi-stage builds for optimization")
     else:
-        lines.append("⚠️  Lab 10 not yet complete.")
+        lines.append("⚠️  Lab 09 not yet complete.")
         lines.append("")
         
         # Provide specific guidance based on what failed
@@ -1273,7 +1384,7 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "Please ensure Docker Desktop is running."
         )
     
-    # Check if this looks like Lab 10 directory
+    # Check if this looks like Lab 09 directory
     compose_file = exercise_path / "docker-compose.yml"
     env_file = exercise_path / ".env"
     
@@ -1283,7 +1394,7 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "║           📍 Lab Status: FILES MISSING                     ║\n"
             "╚════════════════════════════════════════════════════════════╝\n\n"
             "docker-compose.yml not found.\n\n"
-            "Lab 10 builds on Lab 09. Make sure you have:\n"
+            "Lab 09 builds on Lab 09. Make sure you have:\n"
             "  - docker-compose.yml (from Lab 09)\n"
             "  - frontend/, backend/, database/ directories\n\n"
             "Then add production features:\n"

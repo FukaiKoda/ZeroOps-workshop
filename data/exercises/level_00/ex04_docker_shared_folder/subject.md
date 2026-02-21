@@ -22,7 +22,7 @@ Run an official Nginx container with a bind mount so that editing a local `index
 Create your submission folder:
 
 ```
-~/rendudevops/ex05_docker_shared_folder/
+~/rendudevops/ex04_docker_shared_folder/
 └── site-content/
     └── index.html
 ```

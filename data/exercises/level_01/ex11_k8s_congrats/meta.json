@@ -1,0 +1,15 @@
+{
+    "id": "ex11_k8s_congrats",
+    "title": "🏆 Workshop Complete!",
+    "points": 0,
+    "requirements": [
+        "ex10_k8s_labels_selectors"
+    ],
+    "type": "interactive",
+    "difficulty": "beginner",
+    "estimated_time": "1 minute",
+    "tags": [
+        "congratulations",
+        "completion"
+    ]
+}

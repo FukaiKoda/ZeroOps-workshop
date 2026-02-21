@@ -1,4 +1,4 @@
-"""Interactive Docker validation for Lab 07: The Bridge.
+"""Interactive Docker validation for Lab 06: The Bridge.
 
 GRADING STRATEGY:
 =================
@@ -46,7 +46,7 @@ DB_ALONE_CONTAINER = "db-alone"
 POSTGRES_PASSWORD = "secretpass"
 
 # Marker file to track completion of Build phase
-MARKER_FILE_NAME = ".lab07_build_complete"
+MARKER_FILE_NAME = ".lab06_build_complete"
 
 # Points allocation
 POINTS_PART_A = 10
@@ -127,7 +127,7 @@ class GradingReport:
         """Build the summary message."""
         lines = []
         lines.append("=" * 60)
-        lines.append("🌉 Lab 07: The Bridge - Grading Results")
+        lines.append("🌉 Lab 06: The Bridge - Grading Results")
         lines.append(f"   Mode: {self.mode.value.upper()}")
         lines.append("=" * 60)
         lines.append("")
@@ -366,7 +366,7 @@ def _create_marker(exercise_path: Path) -> None:
     marker_path = _get_marker_path(exercise_path)
     marker_path.parent.mkdir(parents=True, exist_ok=True)
     with open(marker_path, 'w') as f:
-        f.write(f"Lab 07 Build Phase completed at {datetime.now().isoformat()}\n")
+        f.write(f"Lab 06 Build Phase completed at {datetime.now().isoformat()}\n")
         f.write("Do not delete this file until you pass the cleanup phase.\n")
 
 
@@ -429,7 +429,6 @@ def validate_build_part_a(exercise_path: Path) -> PartResult:
             description=f"Container '{DB_ALONE_CONTAINER}' cleaned up",
             points_earned=0,
             points_possible=5,
-            hint=f"Remove it: docker rm -f {DB_ALONE_CONTAINER}"
         ))
         result.status = TaskStatus.FAILED
         result.blocking_error = "Clean up Part A test containers first"
@@ -752,7 +751,7 @@ def validate_cleanup_part_d(exercise_path: Path) -> PartResult:
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
-    Main grading function for Lab 07: The Bridge.
+    Main grading function for Lab 06: The Bridge.
     
     Two-phase grading:
     - BUILD mode: Validates Parts A, B, C (infrastructure exists)
@@ -817,11 +816,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         build_message += "\n\n" + "=" * 60
         build_message += "\n🔔 BUILD PHASE COMPLETE!"
         build_message += "\n" + "=" * 60
-        build_message += f"\n\nNow complete Part D:"
-        build_message += f"\n  1. docker stop {DB_CONTAINER} {API_CONTAINER}"
-        build_message += f"\n  2. docker rm {DB_CONTAINER} {API_CONTAINER}"
-        build_message += f"\n  3. docker network rm {NETWORK}"
-        build_message += "\n  4. Submit again to pass CLEANUP phase"
+        build_message += f"\n\nNow complete Part D"
         build_message += "\n\n⚠️  Lab is NOT complete until cleanup is verified!"
         
         return False, build_message  # Return False because cleanup not done yet

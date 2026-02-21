@@ -10,8 +10,6 @@ class JSONDatabase:
         self.data_dir = Path(data_dir)
         self.users_dir = self.data_dir / "users"
         self.exercises_dir = self.data_dir / "exercises"
-        
-        # Ensure directories exist
         self.users_dir.mkdir(parents=True, exist_ok=True)
         self.exercises_dir.mkdir(parents=True, exist_ok=True)
 
@@ -34,7 +32,6 @@ class JSONDatabase:
             f.write(user.model_dump_json(indent=2))
 
     def get_exercise_meta(self, level: int, ex_id: str) -> Optional[ExerciseMetadata]:
-        # Structure: data/exercises/level_XX/ex_id/meta.json
         level_dir = self.exercises_dir / f"level_{level:02d}"
         meta_file = level_dir / ex_id / "meta.json"
         
@@ -50,8 +47,6 @@ class JSONDatabase:
             return None
 
     def get_exercise_details(self, ex_id: str) -> Optional[dict]:
-        # Scan all levels to find the exercise
-        # Naive search for now
         for level_dir in sorted(self.exercises_dir.iterdir()):
             if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
                 continue
@@ -90,15 +85,11 @@ class JSONDatabase:
         if not user:
             return None
         
-        # Add to history
         user.history.append(history_entry)
         
-        # Update progress map
         user.progress[history_entry.ex_id] = history_entry.status
         
-        # Level up logic: Only level up if ALL exercises in current level are SOLVED
         if history_entry.status == ExerciseState.SOLVED:
-            # Find the exercise meta to get points
             found_meta = None
             exercise_level = None
             
@@ -114,27 +105,22 @@ class JSONDatabase:
                         except:
                             pass
             
-            # Award XP for solving the exercise
             if found_meta:
                 user.total_xp += found_meta.points
             
-            # Check if ALL exercises in the current level are solved
             current_level_dir = self.exercises_dir / f"level_{user.current_level:02d}"
             if current_level_dir.exists():
-                # Get all exercises in the current level
                 all_exercises = [
                     item.name for item in current_level_dir.iterdir() 
                     if item.is_dir() and item.name.startswith("ex")
                 ]
                 
-                # Check if all are solved
                 all_solved = True
                 for ex_id in all_exercises:
                     if user.progress.get(ex_id) != ExerciseState.SOLVED:
                         all_solved = False
                         break
                 
-                # Level up only if all exercises in the level are solved
                 if all_solved and all_exercises:
                     user.current_level += 1
 
@@ -152,9 +138,5 @@ class JSONDatabase:
                 print(f"Error loading user {user_file}: {e}")
         return users
 
-
-# Global instance (can be overridden for testing)
-# Default data directory relative to this file:
-# PROJECT_ROOT/server/src/core/database.py -> ... -> PROJECT_ROOT/data
 DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 db = JSONDatabase(os.getenv("DATA_DIR", str(DEFAULT_DATA_DIR)))

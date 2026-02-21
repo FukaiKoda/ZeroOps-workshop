@@ -17,15 +17,9 @@ class LocalGrader:
         
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            
-            # Write the grader script
+
             check_file = tmp_path / "check.py"
             check_file.write_text(script_content)
-            
-            # Create a runner script
-            # We need to pass the 'code' to it? 
-            # In the new design, the client runs the check against the LOCAL SYSTEM.
-            # So `code` might be the path to the files or just empty if checking system state.
             
             runner_content = """
 import sys
@@ -68,26 +62,21 @@ except Exception as e:
             
             # Execute
             try:
-                # We run via subprocess to capture output and exit code
                 result = subprocess.run(
                     [sys.executable, str(runner_file)],
-                    cwd=str(target_dir) if target_dir else os.getcwd(), # Run in user's exercise directory so it can find files/pods
+                    cwd=str(target_dir) if target_dir else os.getcwd(),
                     capture_output=True,
                     text=True,
-                    timeout=30 # 30 seconds timeout
+                    timeout=30
                 )
                 
                 output = result.stdout + result.stderr
                 success = result.returncode == 0
                 
-                # Filter 'SUCCESS' / 'FAILURE' lines if needed, or just return the output
-                # The runner prints SUCCESS/FAILURE then the message.
-                
                 lines = output.strip().splitlines()
                 if not lines:
                      return False, "No output from grader."
 
-                # Simple parsing based on our runner
                 if lines[0] == "SUCCESS":
                     return True, "\n".join(lines[1:])
                 elif lines[0] == "FAILURE":
