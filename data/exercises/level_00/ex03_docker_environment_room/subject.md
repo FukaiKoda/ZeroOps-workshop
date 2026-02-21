@@ -20,7 +20,7 @@ Build an image that uses an environment variable, then prove you can override it
 expected submission folder:
 
 ```
-~/rendudevops/ex04_the_environment_room/
+~/rendudevops/ex03_docker_environment_room/
 └── Dockerfile
 ```
 

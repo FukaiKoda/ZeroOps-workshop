@@ -11,10 +11,7 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
-# Dependency Injection Placeholder (for future endpoints)
-from .core.database import db
 from .api import endpoints
-
 
 # Rate Limiting
 from slowapi import _rate_limit_exceeded_handler
@@ -27,6 +24,3 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(endpoints.router, prefix="/v1")
-
-
-

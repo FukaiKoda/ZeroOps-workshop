@@ -1,4 +1,4 @@
-"""Interactive Docker validation for ex05_docker_shared_folder.
+"""Interactive Docker validation for ex04_docker_shared_folder.
 
 Goal:
 Validate understanding of bind mounts for development:

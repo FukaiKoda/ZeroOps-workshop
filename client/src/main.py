@@ -1,7 +1,9 @@
 import typer
-from textual.app import App, ComposeResult
+from textual.app import App
 from utils.signals import setup_signal_handlers
+from utils.config import settings
 from tui.screens import QuitScreen, Dashboard, LoginScreen
+import shutil
 
 app = typer.Typer()
 
@@ -29,13 +31,22 @@ class ZeroOpsApp(App):
 @app.command()
 def tui():
     """Start the TUI."""
+    # Session Cleanup: Ensure a fresh workspace
+    if settings.RENDU_DIR.exists():
+        try:
+            shutil.rmtree(settings.RENDU_DIR)
+        except Exception as e:
+            print(f"Warning: Failed to clean up {settings.RENDU_DIR}: {e}")
+            
+    settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
+
     tui_app = ZeroOpsApp()
     tui_app.run()
 
 @app.command()
 def version():
     """Show version."""
-    print("ZeroOps Client v0.1.0")
+    print("ZeroOps Client")
 
 if __name__ == "__main__":
     app()

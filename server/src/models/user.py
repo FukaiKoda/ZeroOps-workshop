@@ -3,11 +3,6 @@ from typing import List, Dict, Optional
 from pydantic import BaseModel
 from .exercise import ExerciseState
 
-class SessionContext(BaseModel):
-    ip: str
-    login_time: datetime
-    hostname: Optional[str] = None
-
 class ExerciseHistory(BaseModel):
     ex_id: str
     status: ExerciseState
@@ -19,8 +14,5 @@ class UserProfile(BaseModel):
     current_level: int = 0
     total_xp: int = 0
     history: List[ExerciseHistory] = []
-    session_context: Optional[SessionContext] = None
-    
-    # Quick lookup for exercise state
     progress: Dict[str, ExerciseState] = {}
 

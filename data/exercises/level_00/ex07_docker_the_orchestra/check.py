@@ -1,4 +1,4 @@
-"""Interactive Docker Compose validation for Lab 08: The Orchestra.
+"""Interactive Docker Compose validation for Lab 07: The Orchestra.
 
 Goal:
 Validate Docker Compose setup with multi-service orchestration:
@@ -92,7 +92,7 @@ def _validate_compose_file(compose_path: Path) -> Tuple[bool, Dict[str, Any], Li
     errors = []
     
     if not compose_path.exists():
-        return False, {}, [f"docker-compose.yml not found at {compose_path}"]
+        return False, {}, [f"docker-compose.yml not found."]
     
     # Try to parse YAML
     try:
@@ -435,8 +435,6 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     if not valid or not data:
         all_errors.extend(errors)
         all_errors.append("")
-        all_errors.append("Create your docker-compose.yml at:")
-        all_errors.append(f"  {compose_path}")
         return False, "Validation failed:\n- " + "\n- ".join(all_errors)
     
     successes.append("docker-compose.yml found and valid YAML")

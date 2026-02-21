@@ -1,4 +1,4 @@
-# 🔬 Lab 09: The Full Stack
+# 🔬 Lab 08: The Full Stack
 ## "Multi-Service Application"
 
 ## 🔑 Core Concepts
@@ -29,111 +29,21 @@ By the end of this lab, you should be able to:
 
 ## 📥 Provided
 
-- Submission directory: `~/rendudevops/ex09_docker_full_stack/`
-- Directory Structure:
+- Submission directory: `~/rendudevops/ex08_docker_full_stack/`
+- The following files will be generated automatically after your first submission:
 
 ```text
-ex09_docker_full_stack/
+ex08_docker_full_stack/
 ├── docker-compose.yml      # You will create this
 ├── frontend/
-│   ├── Dockerfile          # Provided
-│   └── index.html          # Provided
+│   ├── Dockerfile          # Auto-generated
+│   └── index.html          # Auto-generated
 ├── backend/
-│   ├── Dockerfile          # Provided
-│   ├── app.py              # Provided
-│   └── requirements.txt    # Provided
+│   ├── Dockerfile          # Auto-generated
+│   ├── app.py              # Auto-generated
+│   └── requirements.txt    # Auto-generated
 └── database/
-    └── init.sql            # Provided
-```
-
-**frontend/Dockerfile:**
-
-```dockerfile
-FROM nginx:alpine
-COPY index.html /usr/share/nginx/html/
-EXPOSE 80
-```
-
-**frontend/index.html:**
-
-```html
-<!DOCTYPE html>
-<html>
-<head><title>Grade Me Portal</title></head>
-<body>
-    <h1>🎓 Grade Me Student Portal</h1>
-    <p>API Endpoint: <a href="http://localhost:5000/health">Backend Health</a></p>
-</body>
-</html>
-```
-
-**backend/Dockerfile:**
-
-```dockerfile
-FROM python:3.11-alpine
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
-EXPOSE 5000
-CMD ["python", "app.py"]
-```
-
-**backend/requirements.txt:**
-
-```text
-flask==3.0.0
-psycopg2-binary==2.9.9
-```
-
-**backend/app.py:**
-
-```python
-from flask import Flask, jsonify
-import psycopg2
-import os
-
-app = Flask(__name__)
-
-def get_db_connection():
-    return psycopg2.connect(
-        host=os.environ.get('DB_HOST', 'db'),
-        database=os.environ.get('DB_NAME', 'grademe'),
-        user=os.environ.get('DB_USER', 'postgres'),
-        password=os.environ.get('DB_PASSWORD', 'secretpass')
-    )
-
-@app.route('/health')
-def health():
-    return jsonify({"status": "healthy", "service": "backend"})
-
-@app.route('/submissions')
-def submissions():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute('SELECT student_name, grade FROM submissions;')
-    results = cur.fetchall()
-    cur.close()
-    conn.close()
-    return jsonify([{"name": r[0], "grade": r[1]} for r in results])
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
-```
-
-**database/init.sql:**
-
-```sql
-CREATE TABLE IF NOT EXISTS submissions (
-    id SERIAL PRIMARY KEY,
-    student_name VARCHAR(100),
-    grade INTEGER
-);
-
-INSERT INTO submissions (student_name, grade) VALUES
-    ('Alice', 95),
-    ('Bob', 87),
-    ('Charlie', 92);
+    └── init.sql            # Auto-generated
 ```
 
 ## 🛠️ Task List
@@ -237,42 +147,3 @@ Expected Output:
 - `depends_on` only waits for container start, not for app readiness.
 - The backend might fail initially if DB isn't ready - it will retry.
 - If database doesn't have data, try: `docker compose down -v && docker compose up -d`
-
-## 📋 Cheat Sheet
-
-| Command | What it actually does |
-|---------|----------------------|
-| `docker compose up --build` | Rebuilds images before starting |
-| `docker compose build` | Only builds/rebuilds images |
-| `docker compose up --build -d` | Rebuild and start in background |
-| `docker compose logs backend` | View logs for one specific service |
-| `depends_on:` | Starts services in order (but doesn't wait for "ready") |
-
-## 📄 Multi-Service Compose Pattern
-
-```yaml
-services:
-  frontend:
-    build: ./frontend
-    ports:
-      - "8080:80"
-    depends_on:
-      - backend
-
-  backend:
-    build: ./backend
-    ports:
-      - "5000:5000"
-    environment:
-      - DB_HOST=db
-    depends_on:
-      - db
-
-  db:
-    image: postgres:15-alpine
-    volumes:
-      - db-data:/var/lib/postgresql/data
-
-volumes:
-  db-data:
-```

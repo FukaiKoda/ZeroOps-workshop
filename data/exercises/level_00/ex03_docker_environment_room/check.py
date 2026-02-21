@@ -1,4 +1,4 @@
-"""Interactive Docker validation for ex04_the_environment_room.
+"""Interactive Docker validation for ex03_docker_environment_room.
 
 Goal:
 Validate understanding of Docker environment variables:
@@ -210,7 +210,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     ok, content, err = _read_text(dockerfile_path)
     if not ok:
         errors.append(
-            f"Dockerfile not"
+            f"Dockerfile not found at {dockerfile_path}"
         )
         return False, "Validation failed:\n- " + "\n- ".join(errors)
 

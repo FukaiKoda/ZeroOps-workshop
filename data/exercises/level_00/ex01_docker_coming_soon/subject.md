@@ -33,7 +33,6 @@ By the end of this lab, you should be able to:
 
 ## 📥 Provided
 
-- Submission directory: `~/rendudevops/ex02_docker_coming_soon/`
 
 ## 🛠️  Task List
 

@@ -1,4 +1,4 @@
-# 🔬 Lab 10: Ship It!
+# 🔬 Lab 09: Ship It!
 ## "Production-Ready Practices"
 
 ## 🔑 Core Concepts
@@ -32,24 +32,24 @@ By the end of this lab, you should be able to:
 
 ## 📥 Provided
 
-- Submission directory: `~/rendudevops/ex10_docker_ship_it/`
-- Starting point: Complete solution from Lab 09
+- Submission directory: `~/rendudevops/ex09_docker_ship_it/`
+- The base files from Lab 08 will be generated automatically after your first submission.
 - Directory structure:
 
 ```text
-ex10_docker_ship_it/
-├── docker-compose.yml     # Enhanced from Lab 09
+ex09_docker_ship_it/
+├── docker-compose.yml     # You will create/enhance this
 ├── .env                   # You will create this
 ├── .gitignore             # You will create this
 ├── frontend/
-│   ├── Dockerfile
-│   └── index.html
+│   ├── Dockerfile         # Auto-generated
+│   └── index.html         # Auto-generated
 ├── backend/
-│   ├── Dockerfile
-│   ├── app.py
-│   └── requirements.txt
+│   ├── Dockerfile         # Auto-generated (includes curl for healthcheck)
+│   ├── app.py             # Auto-generated
+│   └── requirements.txt   # Auto-generated
 └── database/
-    └── init.sql
+    └── init.sql           # Auto-generated
 ```
 
 ## 🛠️ Task List
@@ -166,10 +166,8 @@ backend:
   deploy:
     resources:
       limits:
-        cpus: '0.5'
         memory: 256M
       reservations:
-        cpus: '0.25'
         memory: 128M
 ```
 
@@ -215,7 +213,7 @@ curl localhost:5000/submissions      # Database connectivity
 - Required environment variables: `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DB_HOST`
 - Health checks required for: `db`, `backend`
 - Restart policy required for: `frontend`, `backend`, `db`
-- Resource limits required for: `backend`
+- Memory limits required for: `backend` (CPU limits are optional - some systems don't support them)
 - The `.env` file should be in `.gitignore`
 
 ## 🧪 Validation
@@ -230,9 +228,9 @@ Expected Output:
 
 ```text
 NAME                              STATUS           HEALTH
-ex10_docker_ship_it-backend-1     Up 30 seconds    healthy
-ex10_docker_ship_it-db-1          Up 35 seconds    healthy
-ex10_docker_ship_it-frontend-1    Up 28 seconds    healthy
+ex09_docker_ship_it-backend-1     Up 30 seconds    healthy
+ex09_docker_ship_it-db-1          Up 35 seconds    healthy
+ex09_docker_ship_it-frontend-1    Up 28 seconds    healthy
 ```
 
 Test the full stack:
@@ -256,77 +254,11 @@ Expected Output:
 - Health checks run **INSIDE** the container, so paths must be valid inside the container.
 - `service_healthy` condition requires the dependency to have a health check defined first.
 - For local testing with resource limits, ensure Docker has enough resources allocated.
+- **CPU limits are optional** - some Linux kernels don't support NanoCPUs. Memory limits are required.
 - If a container keeps crashing, check logs: `docker compose logs <service>`.
 - The backend healthcheck uses `curl`, so make sure the backend Dockerfile has curl installed.
 - Create `.gitignore` before your first commit to prevent leaking secrets!
 
-## 📋 Cheat Sheet
-
-| Command | What it actually does |
-|---------|----------------------|
-| `docker compose config` | Shows resolved compose file with all ${VAR} replaced |
-| `docker compose ps` | Shows status and health of all services |
-| `docker compose up -d` | Start all services in background |
-| `docker compose down` | Stop and remove all containers |
-| `docker compose logs -f` | Follow logs from all services |
-| `docker kill <name>` | Force stop a container (to test restart policy) |
-
-## 📄 Complete Production Compose Example
-
-```yaml
-services:
-  frontend:
-    build: ./frontend
-    ports:
-      - "${FRONTEND_PORT:-8080}:80"
-    restart: unless-stopped
-    depends_on:
-      - backend
-
-  backend:
-    build: ./backend
-    ports:
-      - "${BACKEND_PORT:-5000}:5000"
-    environment:
-      - DB_HOST=${DB_HOST}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    depends_on:
-      db:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
-
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-    volumes:
-      - db-data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  db-data:
-```
 
 ## 🔄 Restart Policies
 

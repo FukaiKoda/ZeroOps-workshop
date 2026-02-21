@@ -1,5 +1,5 @@
 """
-Lab 09 Grader: The Full Stack
+Lab 08 Grader: The Full Stack
 Multi-Service Application Validation
 
 Validates:
@@ -25,10 +25,10 @@ import time
 # SECTION 1: Configuration
 # ============================================================
 
-class Lab09Config:
-    """Lab 09 specific configuration."""
+class Lab08Config:
+    """Lab 08 specific configuration."""
     
-    LAB_NUMBER = "09"
+    LAB_NUMBER = "08"
     LAB_TITLE = "The Full Stack"
     
     # Expected services
@@ -36,13 +36,13 @@ class Lab09Config:
         "frontend": {
             "build_context": "./frontend",
             "ports": {"80/tcp": "8080"},
-            "image_contains": "lab-09",  # Compose naming convention
+            "image_contains": "lab-08",  # Compose naming convention
         },
         "backend": {
             "build_context": "./backend",
             "ports": {"5000/tcp": "5000"},
             "env_required": ["DB_HOST", "DB_PASSWORD"],
-            "image_contains": "lab-09",
+            "image_contains": "lab-08",
         },
         "db": {
             "image": "postgres:15-alpine",
@@ -63,7 +63,7 @@ class Lab09Config:
     ]
     
     # Expected volume
-    VOLUME_NAME = "db-data"  # or lab-09_db-data with compose prefix
+    VOLUME_NAME = "db-data"  # or lab-08_db-data with compose prefix
     
     # API endpoints to test
     ENDPOINTS = {
@@ -79,6 +79,107 @@ class Lab09Config:
 # ============================================================
 # SECTION 2: Utility Functions
 # ============================================================
+
+def _rendu_dir(exercise_path: Path) -> Path:
+    """Get the user's submission directory."""
+    return Path.home() / "rendudevops" / exercise_path.name
+
+
+# Default file contents for auto-creation
+DEFAULT_FRONTEND_DOCKERFILE = """FROM nginx:alpine
+COPY index.html /usr/share/nginx/html/
+EXPOSE 80
+"""
+
+DEFAULT_FRONTEND_INDEX_HTML = """<!DOCTYPE html>
+<html>
+<head><title>Grade Me Portal</title></head>
+<body>
+    <h1>🎓 Grade Me Student Portal</h1>
+    <p>API Endpoint: <a href="http://localhost:5000/health">Backend Health</a></p>
+</body>
+</html>
+"""
+
+DEFAULT_BACKEND_DOCKERFILE = """FROM python:3.11-alpine
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY app.py .
+EXPOSE 5000
+CMD ["python", "app.py"]
+"""
+
+DEFAULT_BACKEND_REQUIREMENTS = """flask==3.0.0
+psycopg2-binary==2.9.9
+"""
+
+DEFAULT_BACKEND_APP_PY = """from flask import Flask, jsonify
+import psycopg2
+import os
+
+app = Flask(__name__)
+
+def get_db_connection():
+    return psycopg2.connect(
+        host=os.environ.get('DB_HOST', 'db'),
+        database=os.environ.get('DB_NAME', 'grademe'),
+        user=os.environ.get('DB_USER', 'postgres'),
+        password=os.environ.get('DB_PASSWORD', 'secretpass')
+    )
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "healthy", "service": "backend"})
+
+@app.route('/submissions')
+def submissions():
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute('SELECT student_name, grade FROM submissions;')
+    results = cur.fetchall()
+    cur.close()
+    conn.close()
+    return jsonify([{"name": r[0], "grade": r[1]} for r in results])
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+"""
+
+DEFAULT_DATABASE_INIT_SQL = """CREATE TABLE IF NOT EXISTS submissions (
+    id SERIAL PRIMARY KEY,
+    student_name VARCHAR(100),
+    grade INTEGER
+);
+
+INSERT INTO submissions (student_name, grade) VALUES
+    ('Alice', 95),
+    ('Bob', 87),
+    ('Charlie', 92);
+"""
+
+
+def _ensure_project_structure(rendu_path: Path) -> None:
+    """Auto-create the entire project structure if it doesn't exist."""
+    files_to_create = {
+        "frontend/Dockerfile": DEFAULT_FRONTEND_DOCKERFILE,
+        "frontend/index.html": DEFAULT_FRONTEND_INDEX_HTML,
+        "backend/Dockerfile": DEFAULT_BACKEND_DOCKERFILE,
+        "backend/requirements.txt": DEFAULT_BACKEND_REQUIREMENTS,
+        "backend/app.py": DEFAULT_BACKEND_APP_PY,
+        "database/init.sql": DEFAULT_DATABASE_INIT_SQL,
+    }
+
+    try:
+        rendu_path.mkdir(parents=True, exist_ok=True)
+        for file_path, content in files_to_create.items():
+            full_path = rendu_path / file_path
+            full_path.parent.mkdir(parents=True, exist_ok=True)
+            if not full_path.exists():
+                full_path.write_text(content)
+    except Exception:
+        pass  # Errors will be caught by verify_required_files
+
 
 def run_cmd(args: List[str], timeout: int = 30) -> Tuple[int, str, str]:
     """Execute command and return (exit_code, stdout, stderr)."""
@@ -251,7 +352,7 @@ def verify_required_files(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify all required source files exist."""
     errors = []
     
-    for file_path in Lab09Config.REQUIRED_FILES:
+    for file_path in Lab08Config.REQUIRED_FILES:
         full_path = exercise_path / file_path
         if not full_path.exists():
             errors.append(f"Missing file: {file_path}")
@@ -286,7 +387,7 @@ def verify_compose_file_structure(exercise_path: Path) -> Tuple[bool, List[str]]
     services = config.get("services", {})
     
     # Check each required service
-    for service_name, requirements in Lab09Config.SERVICES.items():
+    for service_name, requirements in Lab08Config.SERVICES.items():
         if service_name not in services:
             errors.append(f"Missing service: '{service_name}'")
             continue
@@ -374,7 +475,7 @@ def verify_services_running(exercise_path: Path) -> Tuple[bool, List[str]]:
         health = svc.get("Health") or svc.get("health") or ""
         running_services[name] = {"state": state, "health": health}
     
-    for service_name in Lab09Config.SERVICES.keys():
+    for service_name in Lab08Config.SERVICES.keys():
         if service_name not in running_services:
             errors.append(f"Service '{service_name}' is not running")
         else:
@@ -404,7 +505,7 @@ def verify_frontend_endpoint(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify frontend is serving the expected content."""
     errors = []
     
-    url, expected_status, expected_content = Lab09Config.ENDPOINTS["frontend"]
+    url, expected_status, expected_content = Lab08Config.ENDPOINTS["frontend"]
     
     status, body = http_request(url)
     
@@ -425,7 +526,7 @@ def verify_backend_health(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify backend health endpoint responds correctly."""
     errors = []
     
-    url, expected_status, expected_content = Lab09Config.ENDPOINTS["backend_health"]
+    url, expected_status, expected_content = Lab08Config.ENDPOINTS["backend_health"]
     
     # Backend might need a moment to start
     max_retries = 3
@@ -456,7 +557,7 @@ def verify_backend_database_connection(exercise_path: Path) -> Tuple[bool, List[
     """Verify backend can query the database and return data."""
     errors = []
     
-    url, expected_status, expected_content = Lab09Config.ENDPOINTS["backend_api"]
+    url, expected_status, expected_content = Lab08Config.ENDPOINTS["backend_api"]
     
     # Give database time to initialize
     max_retries = 5
@@ -515,8 +616,8 @@ def verify_volume_exists(exercise_path: Path) -> Tuple[bool, List[str]]:
         "db-data",
         f"{project_name}_db-data",
         f"{project_name}-db-data",
-        "lab-09_db-data",
-        "lab09_db-data",
+        "lab-08_db-data",
+        "lab08_db-data",
     ]
     
     # List all volumes
@@ -683,8 +784,8 @@ class Task:
             return False, 0, [f"❌ {self.name}", f"   → Error: {str(e)}"]
 
 
-# Define all tasks for Lab 09
-LAB_09_TASKS = [
+# Define all tasks for Lab 08
+LAB_08_TASKS = [
     # ─────────────────────────────────────────────────────────
     # Category A: Prerequisites & Files
     # ─────────────────────────────────────────────────────────
@@ -819,7 +920,7 @@ LAB_09_TASKS = [
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
-    Main grading function for Lab 09: The Full Stack.
+    Main grading function for Lab 08: The Full Stack.
     
     Verifies:
     1. All required files exist
@@ -828,15 +929,18 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     4. Frontend, backend, and database are functional
     5. Full stack integration works (backend → database)
     """
+    rendu_path = _rendu_dir(exercise_path)
+    _ensure_project_structure(rendu_path)
+
     results = []
     total_score = 0
-    max_score = sum(t.points for t in LAB_09_TASKS)
+    max_score = sum(t.points for t in LAB_08_TASKS)
     completed_tasks = set()
     
     # Group tasks by category for display
     categories = {}
     
-    for task in LAB_09_TASKS:
+    for task in LAB_08_TASKS:
         # Check dependencies
         deps_met = all(d in completed_tasks for d in task.depends_on)
         
@@ -870,7 +974,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     # Header
     lines.append("╔" + "═"*60 + "╗")
-    lines.append("║" + "  Lab 09: The Full Stack - Multi-Service Application  ".center(60) + "║")
+    lines.append("║" + "  Lab 08: The Full Stack - Multi-Service Application  ".center(60) + "║")
     lines.append("╚" + "═"*60 + "╝")
     lines.append("")
     
@@ -893,17 +997,17 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     
     # Score summary
     percentage = (total_score / max_score * 100) if max_score > 0 else 0
-    passing_score = (max_score * Lab09Config.PASSING_PERCENTAGE) // 100
+    passing_score = (max_score * Lab08Config.PASSING_PERCENTAGE) // 100
     
     lines.append("═" * 62)
     lines.append(f"📊 Total Score: {total_score}/{max_score} ({percentage:.0f}%)")
-    lines.append(f"   Passing threshold: {Lab09Config.PASSING_PERCENTAGE}% ({passing_score} pts)")
+    lines.append(f"   Passing threshold: {Lab08Config.PASSING_PERCENTAGE}% ({passing_score} pts)")
     lines.append("")
     
     passed = total_score >= passing_score
     
     if passed:
-        lines.append("🎉 Lab 09 Complete!")
+        lines.append("🎉 Lab 08 Complete!")
         lines.append("")
         lines.append("Skills Mastered:")
         lines.append("   ✓ Writing multi-service docker-compose.yml")
@@ -913,9 +1017,9 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         lines.append("   ✓ Inter-service communication")
         lines.append("   ✓ Full stack deployment")
         lines.append("")
-        lines.append("➡️  Proceed to Lab 10: Ship It! (Production Patterns)")
+        lines.append("➡️  Proceed to Lab 09: Ship It! (Production Patterns)")
     else:
-        lines.append("⚠️  Lab 09 not yet complete.")
+        lines.append("⚠️  Lab 08 not yet complete.")
         lines.append("")
         
         # Provide specific guidance based on what failed
@@ -1075,7 +1179,7 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "║         📍 Lab Status: NOT STARTED                     ║\n"
             "╚════════════════════════════════════════════════════════╝\n\n"
             "docker-compose.yml not found.\n\n"
-            "To begin Lab 09:\n"
+            "To begin Lab 08:\n"
             "  1. Create docker-compose.yml with three services:\n"
             "     - frontend (build: ./frontend, ports: 8080:80)\n"
             "     - backend (build: ./backend, ports: 5000:5000)\n"
