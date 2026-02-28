@@ -22,7 +22,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-
 IMAGE_TAG = "grademe-config:v1"
 ENV_VAR = "APP_COLOR"
 DEFAULT_VALUE = "blue"
@@ -51,7 +50,9 @@ def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
 
 
 def _docker_available() -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=10)
+    code, out, err = _run_command(
+        ["docker", "info", "--format", "{{.ServerVersion}}"], timeout=10
+    )
     if code != 0:
         return False, err or out or "Docker is not available"
     return True, out
@@ -78,9 +79,11 @@ def _has_from_alpine(instructions: list[str]) -> bool:
     for inst in instructions:
         if inst.upper().startswith("FROM "):
             image = inst.split(None, 1)[1].strip()
-            # Allow tag or digest pinning.
-            # Examples: alpine, alpine:3.20, alpine@sha256:...
-            return image == "alpine" or image.startswith("alpine:") or image.startswith("alpine@")
+            return (
+                image == "alpine"
+                or image.startswith("alpine:")
+                or image.startswith("alpine@")
+            )
     return False
 
 
@@ -110,14 +113,13 @@ def _cmd_is_correct(instructions: list[str]) -> Tuple[bool, str]:
 
     cmd_text = " ".join(cmd_lines)
     lowered = cmd_text.lower()
-    # Be flexible about CMD form (shell form vs exec form).
-    # We care about outcomes:
-    # - The variable is referenced (so it can be overridden at runtime)
-    # - The container stays alive (so we can docker exec)
     if "$app_color" not in lowered:
         return False, "CMD must reference $APP_COLOR (not hardcode the color)"
     if "sleep" not in lowered or "infinity" not in lowered:
-        return False, "CMD must include 'sleep infinity' so the container stays inspectable"
+        return (
+            False,
+            "CMD must include 'sleep infinity' so the container stays inspectable",
+        )
     return True, ""
 
 
@@ -153,7 +155,15 @@ def _image_env(tag: str) -> Tuple[bool, list[str], str]:
 
 def _containers_from_image(tag: str) -> Tuple[bool, list[Tuple[str, str]], str]:
     code, out, err = _run_command(
-        ["docker", "ps", "-a", "--filter", f"ancestor={tag}", "--format", "{{.ID}} {{.Names}}"]
+        [
+            "docker",
+            "ps",
+            "-a",
+            "--filter",
+            f"ancestor={tag}",
+            "--format",
+            "{{.ID}} {{.Names}}",
+        ]
     )
     if code != 0:
         return False, [], err or out or "Failed to list containers"
@@ -191,7 +201,9 @@ def _container_running(name_or_id: str) -> bool:
 
 
 def _docker_exec_printenv(name_or_id: str, var: str) -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "exec", name_or_id, "printenv", var], timeout=10)
+    code, out, err = _run_command(
+        ["docker", "exec", name_or_id, "printenv", var], timeout=10
+    )
     if code != 0:
         return False, err or out
     return True, out.strip()
@@ -209,9 +221,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
 
     ok, content, err = _read_text(dockerfile_path)
     if not ok:
-        errors.append(
-            f"Dockerfile not found at {dockerfile_path}"
-        )
+        errors.append(f"Dockerfile not found at {dockerfile_path}")
         return False, "Validation failed:\n- " + "\n- ".join(errors)
 
     instructions = _normalize_dockerfile(content)
@@ -221,9 +231,11 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
 
     env_value = _extract_env_value(instructions, ENV_VAR)
     if env_value is None:
-        errors.append(f"Dockerfile must define ENV ")
+        errors.append("Dockerfile must define ENV ")
     elif env_value != DEFAULT_VALUE:
-        errors.append(f"Dockerfile ENV {ENV_VAR} must default to '{DEFAULT_VALUE}' (got '{env_value}')")
+        errors.append(
+            f"Dockerfile ENV {ENV_VAR} must default to '{DEFAULT_VALUE}' (got '{env_value}')"
+        )
 
     cmd_ok, cmd_err = _cmd_is_correct(instructions)
     if not cmd_ok:
@@ -233,9 +245,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
 
     if not _image_exists(IMAGE_TAG):
-        return False, (
-            f"Image '{IMAGE_TAG}' not found. "
-        )
+        return False, (f"Image '{IMAGE_TAG}' not found. ")
 
     ok, image_env, err = _image_env(IMAGE_TAG)
     if ok:
@@ -243,8 +253,9 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         if not any(str(e).startswith(f"{ENV_VAR}=") for e in image_env):
             return False, f"Image is missing default ENV {expected}."
         if expected not in image_env:
-            # If ENV is present but not the expected value
-            found = next((e for e in image_env if str(e).startswith(f"{ENV_VAR}=")), None)
+            found = next(
+                (e for e in image_env if str(e).startswith(f"{ENV_VAR}=")), None
+            )
             return False, f"Image default env should be '{expected}', found '{found}'."
     else:
         return False, f"Could not inspect image env: {err}"
@@ -288,10 +299,19 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     if red_running_id:
         ok, value = _docker_exec_printenv(red_running_id, ENV_VAR)
         if not ok:
-            return False, f"Found a running red container but could not exec into it: {value}"
+            return (
+                False,
+                f"Found a running red container but could not exec into it: {value}",
+            )
         if value != OVERRIDE_VALUE:
-            return False, f"docker exec printenv {ENV_VAR} returned '{value}', expected '{OVERRIDE_VALUE}'."
-        return True, "✅ Nice! Image defaults to blue and runtime override to red works (verified with docker exec)."
+            return (
+                False,
+                f"docker exec printenv {ENV_VAR} returned '{value}', expected '{OVERRIDE_VALUE}'.",
+            )
+        return (
+            True,
+            "✅ Nice! Image defaults to blue and runtime override to red works (verified with docker exec).",
+        )
 
     return True, (
         "✅ Nice! Image defaults to blue and you have container evidence of the red override. "

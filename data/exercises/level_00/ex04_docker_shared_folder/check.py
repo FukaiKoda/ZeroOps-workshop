@@ -21,7 +21,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-
 CONTAINER_NAME = "shared_site"
 MOUNT_DEST = "/usr/share/nginx/html"
 HOST_FOLDER = "site-content"
@@ -50,7 +49,9 @@ def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
 
 
 def _docker_available() -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=10)
+    code, out, err = _run_command(
+        ["docker", "info", "--format", "{{.ServerVersion}}"], timeout=10
+    )
     if code != 0:
         return False, err or out or "Docker is not available"
     return True, out
@@ -79,7 +80,9 @@ def _inspect_json(args: list[str]) -> Tuple[bool, Optional[Dict[str, Any]], str]
 
 
 def _container_running(name: str) -> bool:
-    code, out, _ = _run_command(["docker", "ps", "--filter", f"name=^{name}$", "--format", "{{.Names}}"])
+    code, out, _ = _run_command(
+        ["docker", "ps", "--filter", f"name=^{name}$", "--format", "{{.Names}}"]
+    )
     if code != 0:
         return False
     return any(line.strip() == name for line in out.splitlines())
@@ -109,8 +112,9 @@ def _docker_exec_cat(name: str, path: str) -> Tuple[bool, str]:
 
 
 def _normalize_text(text: str) -> str:
-    # Normalize line endings + trailing whitespace for robust comparison
-    return "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n")).strip()
+    return "\n".join(
+        line.rstrip() for line in text.replace("\r\n", "\n").split("\n")
+    ).strip()
 
 
 def _parse_docker_time(value: str) -> Optional[datetime]:
@@ -118,17 +122,14 @@ def _parse_docker_time(value: str) -> Optional[datetime]:
     if not value:
         return None
     try:
-        # Example: 2026-02-07T12:34:56.123456789Z
         cleaned = value.strip()
         if cleaned.endswith("Z"):
             cleaned = cleaned[:-1] + "+00:00"
-        # Python doesn't support nanoseconds; trim fractional seconds if needed.
         if "." in cleaned:
             left, right = cleaned.split(".", 1)
-            # right is like: 123456789+00:00
             if "+" in right:
                 frac, tz = right.split("+", 1)
-                frac = frac[:6]  # microseconds
+                frac = frac[:6]
                 cleaned = f"{left}.{frac}+{tz}"
             elif "-" in right:
                 frac, tz = right.split("-", 1)
@@ -158,14 +159,16 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     if not ok:
         return False, (
             "Validation failed:\n"
-            f"- Missing host file: site-content/index.html\n"
+            "- Missing host file: site-content/index.html\n"
             "Create it first (any HTML is fine)."
         )
 
     if not host_content.strip():
-        return False, f"Validation failed:\n- {host_index} is empty. Add some HTML content."
+        return (
+            False,
+            f"Validation failed:\n- {host_index} is empty. Add some HTML content.",
+        )
 
-    # Prefer a deterministic name if present, but accept any suitable running nginx container.
     candidate_ids: list[Tuple[str, str]] = []
     if _container_running(CONTAINER_NAME):
         candidate_ids.append((CONTAINER_NAME, CONTAINER_NAME))
@@ -181,7 +184,9 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
 
     expected_source = str(host_dir.resolve())
 
-    def _has_expected_bind_mount(inspect_data: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def _has_expected_bind_mount(
+        inspect_data: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str]]:
         mounts = inspect_data.get("Mounts", [])
         if not isinstance(mounts, list):
             return False, None
@@ -200,14 +205,12 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             if m_type != "bind":
                 continue
 
-            # Prefer strict: exact source folder.
             try:
                 if Path(source).resolve() == Path(expected_source):
                     return True, found_summary
             except Exception:
                 pass
 
-            # Allow slightly looser matching (symlinks / normalization).
             if source.endswith(f"/{HOST_FOLDER}"):
                 return True, found_summary
 
@@ -248,7 +251,6 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "- No running nginx container found with the required bind mount.\n"
         )
 
-    # Enforce the key learning: the file was edited AFTER the container started.
     started_at_raw = str(inspect.get("State", {}).get("StartedAt", ""))
     started_at = _parse_docker_time(started_at_raw)
     if not started_at:
@@ -260,7 +262,10 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     try:
         host_mtime = datetime.fromtimestamp(host_index.stat().st_mtime, tz=timezone.utc)
     except Exception as e:
-        return False, f"Validation failed:\n- Could not read mtime for {host_index}: {e}"
+        return (
+            False,
+            f"Validation failed:\n- Could not read mtime for {host_index}: {e}",
+        )
 
     if host_mtime <= started_at:
         return False, (
@@ -273,7 +278,9 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "  3) Submit again"
         )
 
-    ok, container_content = _docker_exec_cat(chosen_name_or_id, f"{MOUNT_DEST}/{HOST_INDEX}")
+    ok, container_content = _docker_exec_cat(
+        chosen_name_or_id, f"{MOUNT_DEST}/{HOST_INDEX}"
+    )
     if not ok:
         return False, (
             "Validation failed:\n"
@@ -287,4 +294,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "This usually means the folder is not mounted correctly (or you mounted the wrong path)."
         )
 
-    return True, f"✅ Great! Your bind mount is correct and you edited the file after start (container: {chosen_name_or_id})."
+    return (
+        True,
+        f"✅ Great! Your bind mount is correct and you edited the file after start (container: {chosen_name_or_id}).",
+    )

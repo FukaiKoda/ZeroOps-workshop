@@ -13,7 +13,7 @@ Validates:
 """
 
 from pathlib import Path
-from typing import Tuple, List, Dict, Any, Optional
+from typing import Tuple, List, Optional
 import subprocess
 import json
 import yaml
@@ -21,55 +21,39 @@ import re
 import time
 
 
-# ============================================================
-# SECTION 1: Configuration
-# ============================================================
-
 class Lab09Config:
     """Lab 09 specific configuration."""
-    
+
     LAB_NUMBER = "09"
     LAB_TITLE = "Ship It! (Production-Ready Practices)"
-    
-    # Required environment variables in .env
+
     REQUIRED_ENV_VARS = [
         "POSTGRES_PASSWORD",
         "POSTGRES_DB",
         "DB_HOST",
     ]
-    
-    # Optional but recommended env vars
+
     OPTIONAL_ENV_VARS = [
         "BACKEND_PORT",
         "FRONTEND_PORT",
     ]
-    
-    # Services that must have health checks
+
     HEALTHCHECK_SERVICES = ["db", "backend"]
-    
-    # Services that must have restart policies
+
     RESTART_SERVICES = ["frontend", "backend", "db"]
-    
-    # Valid restart policies for production
+
     VALID_RESTART_POLICIES = ["always", "unless-stopped", "on-failure"]
-    
-    # Services that should have resource limits (optional but checked)
+
     RESOURCE_LIMIT_SERVICES = ["backend"]
-    
-    # Scoring
+
     PASSING_PERCENTAGE = 80
 
-
-# ============================================================
-# SECTION 2: Utility Functions
-# ============================================================
 
 def _rendu_dir(exercise_path: Path) -> Path:
     """Get the user's submission directory."""
     return Path.home() / "rendudevops" / exercise_path.name
 
 
-# Default file contents for auto-creation (same as Lab 08)
 DEFAULT_FRONTEND_DOCKERFILE = """FROM nginx:alpine
 COPY index.html /usr/share/nginx/html/
 EXPOSE 80
@@ -163,7 +147,7 @@ def _ensure_project_structure(rendu_path: Path) -> None:
             if not full_path.exists():
                 full_path.write_text(content)
     except Exception:
-        pass  # Errors will be caught by verification functions
+        pass
 
 
 def run_cmd(args: List[str], timeout: int = 30) -> Tuple[int, str, str]:
@@ -207,14 +191,23 @@ def docker_inspect(resource_type: str, name: str) -> Tuple[bool, dict]:
 def http_request(url: str, timeout: int = 5) -> Tuple[int, str]:
     """Make HTTP request and return (status_code, body)."""
     try:
-        code, out, err = run_cmd([
-            "curl", "-s", "-o", "-", "-w", "\n%{http_code}",
-            "--max-time", str(timeout), url
-        ])
-        
+        code, out, err = run_cmd(
+            [
+                "curl",
+                "-s",
+                "-o",
+                "-",
+                "-w",
+                "\n%{http_code}",
+                "--max-time",
+                str(timeout),
+                url,
+            ]
+        )
+
         if code != 0:
             return -1, err or "Request failed"
-        
+
         lines = out.rsplit("\n", 1)
         if len(lines) == 2:
             body, status = lines
@@ -223,10 +216,6 @@ def http_request(url: str, timeout: int = 5) -> Tuple[int, str]:
     except Exception as e:
         return -1, str(e)
 
-
-# ============================================================
-# SECTION 3: Compose-Specific Utilities
-# ============================================================
 
 def get_compose_project_name(exercise_path: Path) -> str:
     """Get the compose project name (defaults to directory name)."""
@@ -239,18 +228,15 @@ def compose_config(exercise_path: Path) -> Tuple[bool, dict, str]:
     Returns (valid, parsed_config, error_message).
     """
     compose_file = exercise_path / "docker-compose.yml"
-    
+
     if not compose_file.exists():
         return False, {}, "docker-compose.yml not found"
-    
-    # Use --no-interpolate to see raw ${VAR} syntax, then with interpolation
-    code, out, err = run_cmd([
-        "docker", "compose", "-f", str(compose_file), "config"
-    ])
-    
+
+    code, out, err = run_cmd(["docker", "compose", "-f", str(compose_file), "config"])
+
     if code != 0:
         return False, {}, f"Compose validation failed: {err}"
-    
+
     try:
         config = yaml.safe_load(out)
         return True, config, ""
@@ -264,10 +250,10 @@ def compose_config_raw(exercise_path: Path) -> Tuple[bool, str, str]:
     Returns (exists, content, error).
     """
     compose_file = exercise_path / "docker-compose.yml"
-    
+
     if not compose_file.exists():
         return False, "", "docker-compose.yml not found"
-    
+
     try:
         content = compose_file.read_text()
         return True, content, ""
@@ -278,15 +264,14 @@ def compose_config_raw(exercise_path: Path) -> Tuple[bool, str, str]:
 def compose_ps(exercise_path: Path) -> Tuple[bool, List[dict], str]:
     """Get running services status."""
     compose_file = exercise_path / "docker-compose.yml"
-    
-    code, out, err = run_cmd([
-        "docker", "compose", "-f", str(compose_file),
-        "ps", "--format", "json"
-    ])
-    
+
+    code, out, err = run_cmd(
+        ["docker", "compose", "-f", str(compose_file), "ps", "--format", "json"]
+    )
+
     if code != 0:
         return False, [], err
-    
+
     try:
         services = []
         for line in out.strip().split("\n"):
@@ -297,54 +282,50 @@ def compose_ps(exercise_path: Path) -> Tuple[bool, List[dict], str]:
         try:
             services = json.loads(out)
             return True, services if isinstance(services, list) else [services], ""
-        except:
+        except Exception:
             return False, [], "Failed to parse compose ps output"
 
 
 def get_service_container_name(exercise_path: Path, service: str) -> Optional[str]:
     """Get the actual container name for a compose service."""
     success, services, _ = compose_ps(exercise_path)
-    
+
     if not success:
         return None
-    
+
     for svc in services:
         svc_name = svc.get("Service") or svc.get("service") or ""
         if svc_name == service:
             return svc.get("Name") or svc.get("name") or svc.get("ID")
-    
+
     return None
 
 
 def get_service_health(exercise_path: Path, service: str) -> Optional[str]:
     """Get the health status of a service."""
     success, services, _ = compose_ps(exercise_path)
-    
+
     if not success:
         return None
-    
+
     for svc in services:
         svc_name = svc.get("Service") or svc.get("service") or ""
         if svc_name == service:
-            # Health might be in different fields depending on docker version
             health = svc.get("Health") or svc.get("health") or ""
-            
-            # If not in ps output, check via inspect
+
             if not health:
                 container_name = svc.get("Name") or svc.get("name")
                 if container_name:
                     exists, data = docker_inspect("container", container_name)
                     if exists:
-                        health = data.get("State", {}).get("Health", {}).get("Status", "")
-            
+                        health = (
+                            data.get("State", {}).get("Health", {}).get("Status", "")
+                        )
+
             return health
-    
+
     return None
 
-
-# ============================================================
-# SECTION 4: Verification Functions
-# ============================================================
 
 def verify_docker_available() -> Tuple[bool, List[str]]:
     """Verify Docker is available."""
@@ -357,14 +338,14 @@ def verify_docker_available() -> Tuple[bool, List[str]]:
 def verify_env_file_exists(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify .env file exists."""
     env_file = exercise_path / ".env"
-    
+
     if not env_file.exists():
         return False, [
             ".env file not found",
             "  → Create .env with environment variables",
             "  → Example: POSTGRES_PASSWORD=secretpass",
         ]
-    
+
     return True, []
 
 
@@ -372,101 +353,100 @@ def verify_env_file_content(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify .env file has required variables."""
     errors = []
     env_file = exercise_path / ".env"
-    
+
     if not env_file.exists():
         return False, [".env file not found"]
-    
+
     content = env_file.read_text()
     env_vars = {}
-    
+
     for line in content.splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             key, _, value = line.partition("=")
             env_vars[key.strip()] = value.strip()
-    
-    # Check required variables
+
     for var in Lab09Config.REQUIRED_ENV_VARS:
         if var not in env_vars:
             errors.append(f"Missing required variable: {var}")
         elif not env_vars[var]:
             errors.append(f"Variable {var} is empty")
-    
-    # Check for hardcoded passwords (bad practice warning)
+
     if "POSTGRES_PASSWORD" in env_vars:
         password = env_vars["POSTGRES_PASSWORD"]
         weak_passwords = ["password", "123456", "postgres", "admin", "secret"]
         if password.lower() in weak_passwords:
-            errors.append(f"⚠️  Warning: Weak password detected for POSTGRES_PASSWORD")
-    
+            errors.append("⚠️  Warning: Weak password detected for POSTGRES_PASSWORD")
+
     return len(errors) == 0, errors
 
 
 def verify_compose_uses_env_vars(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify docker-compose.yml uses ${VAR} syntax instead of hardcoded values."""
     errors = []
-    
+
     exists, content, err = compose_config_raw(exercise_path)
-    
+
     if not exists:
         return False, [err]
-    
-    # Check for ${VAR} syntax usage
-    env_var_pattern = r'\$\{[A-Z_]+\}'
+
+    env_var_pattern = r"\$\{[A-Z_]+\}"
     uses_env_vars = bool(re.search(env_var_pattern, content))
-    
+
     if not uses_env_vars:
         errors.append("docker-compose.yml doesn't use ${VAR} syntax")
         errors.append("  → Replace hardcoded values with environment variables")
         errors.append("  → Example: POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}")
-    
-    # Check for specific expected env var usages
+
     expected_usages = [
-        ("POSTGRES_PASSWORD", r'\$\{POSTGRES_PASSWORD\}'),
-        ("POSTGRES_DB", r'\$\{POSTGRES_DB\}'),
+        ("POSTGRES_PASSWORD", r"\$\{POSTGRES_PASSWORD\}"),
+        ("POSTGRES_DB", r"\$\{POSTGRES_DB\}"),
     ]
-    
+
     for var_name, pattern in expected_usages:
         if not re.search(pattern, content):
-            # Also check for $VAR syntax (without braces)
-            alt_pattern = r'\$' + var_name + r'[^A-Z_]'
+            alt_pattern = r"\$" + var_name + r"[^A-Z_]"
             if not re.search(alt_pattern, content):
                 errors.append(f"Not using ${{{var_name}}} in compose file")
-    
-    # Check for hardcoded passwords (bad practice)
+
     hardcoded_patterns = [
-        (r'POSTGRES_PASSWORD:\s*["\']?[a-zA-Z0-9]+["\']?\s*$', "Hardcoded POSTGRES_PASSWORD detected"),
+        (
+            r'POSTGRES_PASSWORD:\s*["\']?[a-zA-Z0-9]+["\']?\s*$',
+            "Hardcoded POSTGRES_PASSWORD detected",
+        ),
         (r'password:\s*["\']?[a-zA-Z0-9]+["\']?\s*$', "Possible hardcoded password"),
     ]
-    
+
     for pattern, message in hardcoded_patterns:
         if re.search(pattern, content, re.MULTILINE | re.IGNORECASE):
-            # Make sure it's not a ${VAR} reference
-            if "${" not in re.search(pattern, content, re.MULTILINE | re.IGNORECASE).group():
+            if (
+                "${"
+                not in re.search(pattern, content, re.MULTILINE | re.IGNORECASE).group()
+            ):
                 errors.append(f"⚠️  {message} - use ${{VAR}} syntax instead")
-    
+
     return len(errors) == 0, errors
 
 
 def verify_healthcheck_defined(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify health checks are defined for required services."""
     errors = []
-    
+
     valid, config, err = compose_config(exercise_path)
-    
+
     if not valid:
         return False, [f"Could not parse compose file: {err}"]
-    
+
     services = config.get("services", {})
-    
+
     for service_name in Lab09Config.HEALTHCHECK_SERVICES:
         if service_name not in services:
             errors.append(f"Service '{service_name}' not found in compose file")
             continue
-        
+
         service = services[service_name]
         healthcheck = service.get("healthcheck")
-        
+
         if not healthcheck:
             errors.append(f"Service '{service_name}' missing healthcheck")
             if service_name == "db":
@@ -475,34 +455,37 @@ def verify_healthcheck_defined(exercise_path: Path) -> Tuple[bool, List[str]]:
                 errors.append("       interval: 10s")
             elif service_name == "backend":
                 errors.append("  → Add: healthcheck:")
-                errors.append('       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]')
+                errors.append(
+                    '       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]'
+                )
                 errors.append("       interval: 30s")
         else:
-            # Validate healthcheck structure
             test = healthcheck.get("test")
             if not test:
-                errors.append(f"Service '{service_name}' healthcheck missing 'test' command")
-            
+                errors.append(
+                    f"Service '{service_name}' healthcheck missing 'test' command"
+                )
+
             interval = healthcheck.get("interval")
             if not interval:
-                errors.append(f"Service '{service_name}' healthcheck missing 'interval'")
-    
+                errors.append(
+                    f"Service '{service_name}' healthcheck missing 'interval'"
+                )
+
     return len(errors) == 0, errors
 
 
 def verify_depends_on_healthy(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify backend uses depends_on with condition: service_healthy."""
     errors = []
-    
-    # First check raw file for syntax
+
     exists, content, err = compose_config_raw(exercise_path)
-    
+
     if not exists:
         return False, [err]
-    
-    # Check for service_healthy condition in raw file
+
     has_condition = "condition:" in content and "service_healthy" in content
-    
+
     if not has_condition:
         errors.append("Missing 'depends_on' with 'condition: service_healthy'")
         errors.append("  → Update backend service:")
@@ -510,18 +493,16 @@ def verify_depends_on_healthy(exercise_path: Path) -> Tuple[bool, List[str]]:
         errors.append("         db:")
         errors.append("           condition: service_healthy")
         return False, errors
-    
-    # Parse config to verify structure
+
     valid, config, err = compose_config(exercise_path)
-    
+
     if not valid:
         return False, [f"Could not parse compose file: {err}"]
-    
+
     services = config.get("services", {})
     backend = services.get("backend", {})
     depends_on = backend.get("depends_on", {})
-    
-    # depends_on can be a list (simple) or dict (with conditions)
+
     if isinstance(depends_on, list):
         errors.append("backend 'depends_on' uses simple list syntax")
         errors.append("  → Change to object syntax with condition:")
@@ -533,40 +514,41 @@ def verify_depends_on_healthy(exercise_path: Path) -> Tuple[bool, List[str]]:
         if isinstance(db_dep, dict):
             condition = db_dep.get("condition", "")
             if condition != "service_healthy":
-                errors.append(f"backend depends_on db condition is '{condition}', expected 'service_healthy'")
+                errors.append(
+                    f"backend depends_on db condition is '{condition}', expected 'service_healthy'"
+                )
         else:
             errors.append("backend depends_on db should use condition syntax")
-    
+
     return len(errors) == 0, errors
 
 
 def verify_restart_policies(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify all services have appropriate restart policies."""
     errors = []
-    
+
     valid, config, err = compose_config(exercise_path)
-    
+
     if not valid:
         return False, [f"Could not parse compose file: {err}"]
-    
+
     services = config.get("services", {})
-    
+
     for service_name in Lab09Config.RESTART_SERVICES:
         if service_name not in services:
             continue
-        
+
         service = services[service_name]
         restart = service.get("restart", "no")
-        
-        # Handle deploy.restart_policy for swarm mode
+
         deploy = service.get("deploy", {})
         restart_policy = deploy.get("restart_policy", {})
         deploy_condition = restart_policy.get("condition", "")
-        
+
         if restart not in Lab09Config.VALID_RESTART_POLICIES and not deploy_condition:
             errors.append(f"Service '{service_name}' has restart policy '{restart}'")
-            errors.append(f"  → Add: restart: unless-stopped")
-    
+            errors.append("  → Add: restart: unless-stopped")
+
     return len(errors) == 0, errors
 
 
@@ -574,23 +556,23 @@ def verify_resource_limits(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify services have resource limits defined (memory required, CPU optional)."""
     errors = []
     warnings = []
-    
+
     valid, config, err = compose_config(exercise_path)
-    
+
     if not valid:
         return False, [f"Could not parse compose file: {err}"]
-    
+
     services = config.get("services", {})
-    
+
     for service_name in Lab09Config.RESOURCE_LIMIT_SERVICES:
         if service_name not in services:
             continue
-        
+
         service = services[service_name]
         deploy = service.get("deploy", {})
         resources = deploy.get("resources", {})
         limits = resources.get("limits", {})
-        
+
         if not limits:
             errors.append(f"Service '{service_name}' missing resource limits")
             errors.append("  → Add to service:")
@@ -600,47 +582,48 @@ def verify_resource_limits(exercise_path: Path) -> Tuple[bool, List[str]]:
             errors.append("             memory: 256M")
             errors.append("           (cpus is optional)")
         else:
-            # Memory is required, CPU is optional (some kernels don't support it)
             if "memory" not in limits:
                 errors.append(f"Service '{service_name}' missing memory limit")
                 errors.append("  → Add: memory: 256M (or similar)")
-            
-            # CPU is optional - just warn if missing
+
             if "cpus" not in limits:
-                warnings.append(f"Service '{service_name}' has no CPU limit (optional, some systems don't support it)")
-    
-    # Check other services (warning only)
+                warnings.append(
+                    f"Service '{service_name}' has no CPU limit (optional, some systems don't support it)"
+                )
+
     for service_name, service in services.items():
         if service_name in Lab09Config.RESOURCE_LIMIT_SERVICES:
             continue
-        
+
         deploy = service.get("deploy", {})
         resources = deploy.get("resources", {})
-        
+
         if not resources.get("limits"):
-            warnings.append(f"Service '{service_name}' has no resource limits (recommended for production)")
-    
+            warnings.append(
+                f"Service '{service_name}' has no resource limits (recommended for production)"
+            )
+
     return len(errors) == 0, errors + warnings
 
 
 def verify_services_running(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify all services are running."""
     errors = []
-    
+
     success, services, err = compose_ps(exercise_path)
-    
+
     if not success:
         return False, [f"Could not check services: {err}"]
-    
+
     if not services:
         return False, ["No services running. Run 'docker compose up -d'"]
-    
+
     running_services = {}
     for svc in services:
         name = svc.get("Service") or svc.get("service") or ""
         state = svc.get("State") or svc.get("state") or ""
         running_services[name] = state
-    
+
     expected = ["frontend", "backend", "db"]
     for service_name in expected:
         if service_name not in running_services:
@@ -648,57 +631,64 @@ def verify_services_running(exercise_path: Path) -> Tuple[bool, List[str]]:
         else:
             state = running_services[service_name]
             if state.lower() not in ["running", "up"]:
-                errors.append(f"Service '{service_name}' is not running (state: {state})")
-    
+                errors.append(
+                    f"Service '{service_name}' is not running (state: {state})"
+                )
+
     return len(errors) == 0, errors
 
 
 def verify_services_healthy(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify services with health checks report healthy status."""
     errors = []
-    
-    # Give services time to become healthy
-    max_wait = 60  # seconds
+
+    max_wait = 60
     check_interval = 5
     elapsed = 0
-    
+
     while elapsed < max_wait:
         all_healthy = True
         current_errors = []
-        
+
         for service_name in Lab09Config.HEALTHCHECK_SERVICES:
             health = get_service_health(exercise_path, service_name)
-            
+
             if health is None:
-                current_errors.append(f"Could not get health status for '{service_name}'")
+                current_errors.append(
+                    f"Could not get health status for '{service_name}'"
+                )
                 all_healthy = False
             elif health.lower() == "healthy":
-                pass  # Good
+                pass
             elif health.lower() == "starting":
-                all_healthy = False  # Still starting, wait
+                all_healthy = False
             elif health.lower() == "unhealthy":
                 current_errors.append(f"Service '{service_name}' is unhealthy")
-                current_errors.append(f"  → Check logs: docker compose logs {service_name}")
+                current_errors.append(
+                    f"  → Check logs: docker compose logs {service_name}"
+                )
                 all_healthy = False
             elif not health:
                 current_errors.append(f"Service '{service_name}' has no health status")
-                current_errors.append(f"  → Healthcheck might not be configured")
+                current_errors.append("  → Healthcheck might not be configured")
                 all_healthy = False
             else:
-                current_errors.append(f"Service '{service_name}' health status: {health}")
+                current_errors.append(
+                    f"Service '{service_name}' health status: {health}"
+                )
                 all_healthy = False
-        
+
         if all_healthy:
             return True, []
-        
+
         errors = current_errors
-        
+
         if elapsed < max_wait - check_interval:
             time.sleep(check_interval)
             elapsed += check_interval
         else:
             break
-    
+
     errors.insert(0, f"Services not healthy after {max_wait} seconds")
     return False, errors
 
@@ -706,132 +696,119 @@ def verify_services_healthy(exercise_path: Path) -> Tuple[bool, List[str]]:
 def verify_restart_policy_works(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Test restart policy by killing a container and checking recovery."""
     errors = []
-    
-    # Get backend container name
+
     container_name = get_service_container_name(exercise_path, "backend")
-    
+
     if not container_name:
         return False, ["Could not find backend container for restart test"]
-    
-    # Check current state
+
     exists, data = docker_inspect("container", container_name)
     if not exists:
         return False, ["Backend container not found"]
-    
-    # Get restart policy
-    restart_policy = data.get("HostConfig", {}).get("RestartPolicy", {}).get("Name", "no")
-    
+
+    restart_policy = (
+        data.get("HostConfig", {}).get("RestartPolicy", {}).get("Name", "no")
+    )
+
     if restart_policy not in Lab09Config.VALID_RESTART_POLICIES:
-        errors.append(f"Backend restart policy is '{restart_policy}', expected one of {Lab09Config.VALID_RESTART_POLICIES}")
+        errors.append(
+            f"Backend restart policy is '{restart_policy}', expected one of {Lab09Config.VALID_RESTART_POLICIES}"
+        )
         return False, errors
-    
-    # Kill the container
+
     code, _, err = run_cmd(["docker", "kill", container_name])
-    
+
     if code != 0:
         return False, [f"Could not kill container for test: {err}"]
-    
-    # Wait for restart
+
     max_wait = 30
     check_interval = 2
     elapsed = 0
     recovered = False
-    
+
     while elapsed < max_wait:
         time.sleep(check_interval)
         elapsed += check_interval
-        
-        # Check if container is running again
+
         exists, data = docker_inspect("container", container_name)
-        
+
         if exists:
             is_running = data.get("State", {}).get("Running", False)
             if is_running:
                 recovered = True
                 break
-    
+
     if not recovered:
         errors.append(f"Backend container did not recover after {max_wait} seconds")
         errors.append("  → Restart policy might not be configured correctly")
         errors.append("  → Check: restart: unless-stopped")
         return False, errors
-    
-    # Wait for health check to pass again
+
     time.sleep(5)
-    
-    # Verify backend is responding
+
     status, _ = http_request("http://localhost:5000/health", timeout=10)
-    
+
     if status != 200:
         errors.append("Backend recovered but /health endpoint not responding")
         errors.append("  → Container restarted but application might have issues")
-    
+
     return len(errors) == 0, errors
 
 
 def verify_env_vars_resolved(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify that environment variables are properly resolved in config."""
     errors = []
-    
-    # Run docker compose config to see resolved values
+
     compose_file = exercise_path / "docker-compose.yml"
-    
-    code, out, err = run_cmd([
-        "docker", "compose", "-f", str(compose_file), "config"
-    ])
-    
+
+    code, out, err = run_cmd(["docker", "compose", "-f", str(compose_file), "config"])
+
     if code != 0:
         return False, [f"Could not verify env resolution: {err}"]
-    
-    # Check that ${VAR} patterns are NOT in the output (meaning they were resolved)
-    unresolved = re.findall(r'\$\{[A-Z_]+\}', out)
-    
+
+    unresolved = re.findall(r"\$\{[A-Z_]+\}", out)
+
     if unresolved:
         errors.append(f"Unresolved environment variables: {', '.join(set(unresolved))}")
         errors.append("  → Check that .env file contains these variables")
         errors.append("  → Verify .env is in the same directory as docker-compose.yml")
-    
-    # Check that resolved values are not empty
+
     try:
         config = yaml.safe_load(out)
         services = config.get("services", {})
-        
+
         db_service = services.get("db", {})
         db_env = db_service.get("environment", {})
-        
-        # Handle both list and dict format
+
         if isinstance(db_env, list):
             db_env = dict(e.split("=", 1) if "=" in e else (e, "") for e in db_env)
-        
+
         postgres_pass = db_env.get("POSTGRES_PASSWORD", "")
         if not postgres_pass or postgres_pass == "${POSTGRES_PASSWORD}":
             errors.append("POSTGRES_PASSWORD not resolved or empty")
-        
+
     except Exception as e:
         errors.append(f"Could not verify resolved config: {e}")
-    
+
     return len(errors) == 0, errors
 
 
 def verify_full_stack_working(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify the full stack is operational after production hardening."""
     errors = []
-    
-    # Test frontend
+
     status, body = http_request("http://localhost:8080")
     if status != 200:
         errors.append(f"Frontend not responding (status: {status})")
     elif "grade" not in body.lower():
         errors.append("Frontend response missing expected content")
-    
-    # Test backend health
+
     status, body = http_request("http://localhost:5000/health")
     if status != 200:
         errors.append(f"Backend /health not responding (status: {status})")
     elif "healthy" not in body.lower():
         errors.append("Backend /health not returning healthy status")
-    
-    # Test database connectivity
+
     status, body = http_request("http://localhost:5000/submissions")
     if status != 200:
         errors.append(f"Backend /submissions not responding (status: {status})")
@@ -842,38 +819,34 @@ def verify_full_stack_working(exercise_path: Path) -> Tuple[bool, List[str]]:
                 errors.append("Backend /submissions not returning expected data")
         except json.JSONDecodeError:
             errors.append("Backend /submissions not returning valid JSON")
-    
+
     return len(errors) == 0, errors
 
 
 def verify_gitignore_env(exercise_path: Path) -> Tuple[bool, List[str]]:
     """Verify .env is listed in .gitignore (security best practice)."""
     warnings = []
-    
+
     gitignore = exercise_path / ".gitignore"
-    
+
     if not gitignore.exists():
         warnings.append("⚠️  No .gitignore file found")
         warnings.append("  → Create .gitignore and add .env to it")
         warnings.append("  → Never commit .env files with secrets!")
-        return True, warnings  # Warning only, not a failure
-    
+        return True, warnings
+
     content = gitignore.read_text()
-    
+
     if ".env" not in content:
         warnings.append("⚠️  .env not listed in .gitignore")
         warnings.append("  → Add '.env' to .gitignore to prevent committing secrets")
-    
+
     return True, warnings
 
 
-# ============================================================
-# SECTION 5: Task Definitions
-# ============================================================
-
 class Task:
     """Represents a single gradeable task."""
-    
+
     def __init__(
         self,
         task_id: str,
@@ -892,15 +865,14 @@ class Task:
         self.depends_on = depends_on or []
         self.hint = hint
         self.category = category
-        self.skip_on_fail = skip_on_fail  # If true, failure skips dependent tasks
-    
+        self.skip_on_fail = skip_on_fail
+
     def verify(self, exercise_path: Path) -> Tuple[bool, int, List[str]]:
         """Run verification and return (passed, points_earned, messages)."""
         try:
             passed, errors = self.verify_func(exercise_path)
-            
+
             if passed:
-                # Check for warnings in errors list
                 warnings = [e for e in errors if e.startswith("⚠️")]
                 if warnings:
                     messages = [f"✅ {self.name}"]
@@ -913,16 +885,12 @@ class Task:
                 if self.hint:
                     messages.append(f"   💡 Hint: {self.hint}")
                 return False, 0, messages
-        
+
         except Exception as e:
             return False, 0, [f"❌ {self.name}", f"   → Error: {str(e)}"]
 
 
-# Define all tasks for Lab 09
 LAB_09_TASKS = [
-    # ─────────────────────────────────────────────────────────
-    # Category A: Prerequisites
-    # ─────────────────────────────────────────────────────────
     Task(
         task_id="A1_docker",
         name="Docker is available",
@@ -930,10 +898,6 @@ LAB_09_TASKS = [
         verify_func=lambda _: verify_docker_available(),
         category="Prerequisites",
     ),
-    
-    # ─────────────────────────────────────────────────────────
-    # Category B: Environment Configuration
-    # ─────────────────────────────────────────────────────────
     Task(
         task_id="B1_env_exists",
         name=".env file exists",
@@ -979,10 +943,6 @@ LAB_09_TASKS = [
         hint="Add .env to .gitignore for security",
         category="Environment",
     ),
-    
-    # ─────────────────────────────────────────────────────────
-    # Category C: Health Checks
-    # ─────────────────────────────────────────────────────────
     Task(
         task_id="C1_healthcheck_defined",
         name="Health checks defined for db and backend",
@@ -1001,10 +961,6 @@ LAB_09_TASKS = [
         hint="Use depends_on: db: condition: service_healthy",
         category="Health Checks",
     ),
-    
-    # ─────────────────────────────────────────────────────────
-    # Category D: Restart Policies
-    # ─────────────────────────────────────────────────────────
     Task(
         task_id="D1_restart_policies",
         name="Restart policies configured for all services",
@@ -1014,10 +970,6 @@ LAB_09_TASKS = [
         hint="Add 'restart: unless-stopped' to all services",
         category="Restart Policies",
     ),
-    
-    # ─────────────────────────────────────────────────────────
-    # Category E: Resource Limits
-    # ─────────────────────────────────────────────────────────
     Task(
         task_id="E1_resource_limits",
         name="Resource limits configured for backend",
@@ -1027,10 +979,6 @@ LAB_09_TASKS = [
         hint="Add deploy.resources.limits with cpus and memory",
         category="Resource Limits",
     ),
-    
-    # ─────────────────────────────────────────────────────────
-    # Category F: Runtime Verification
-    # ─────────────────────────────────────────────────────────
     Task(
         task_id="F1_services_running",
         name="All services are running",
@@ -1070,14 +1018,10 @@ LAB_09_TASKS = [
 ]
 
 
-# ============================================================
-# SECTION 6: Main Grader
-# ============================================================
-
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Main grading function for Lab 09: Ship It!
-    
+
     Verifies:
     1. Environment configuration (.env + ${VAR} syntax)
     2. Health checks for critical services
@@ -1086,84 +1030,83 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     5. Resource limits
     6. Runtime health and recovery
     """
-    # Auto-create project structure from Lab 08
     rendu_path = _rendu_dir(exercise_path)
     _ensure_project_structure(rendu_path)
 
-    results = []
     total_score = 0
     max_score = sum(t.points for t in LAB_09_TASKS)
     completed_tasks = set()
-    
-    # Group tasks by category for display
+
     categories = {}
-    
+
     for task in LAB_09_TASKS:
-        # Check dependencies
         deps_met = all(d in completed_tasks for d in task.depends_on)
-        
+
         if not deps_met:
             passed = False
             points = 0
             messages = [f"⏭️  {task.name} (skipped - dependencies not met)"]
         else:
             passed, points, messages = task.verify(exercise_path)
-            
+
             if passed:
                 completed_tasks.add(task.task_id)
-        
+
         total_score += points
-        
-        # Group by category
+
         cat = task.category or "Other"
         if cat not in categories:
             categories[cat] = []
-        categories[cat].append({
-            "task": task,
-            "passed": passed,
-            "points": points,
-            "messages": messages,
-        })
-    
-    # ─────────────────────────────────────────────────────────
-    # Build Report
-    # ─────────────────────────────────────────────────────────
+        categories[cat].append(
+            {
+                "task": task,
+                "passed": passed,
+                "points": points,
+                "messages": messages,
+            }
+        )
+
     lines = []
-    
-    # Header
-    lines.append("╔" + "═"*62 + "╗")
-    lines.append("║" + "  Lab 09: Ship It! - Production-Ready Practices  ".center(62) + "║")
-    lines.append("╚" + "═"*62 + "╝")
+
+    lines.append("╔" + "═" * 62 + "╗")
+    lines.append(
+        "║" + "  Lab 09: Ship It! - Production-Ready Practices  ".center(62) + "║"
+    )
+    lines.append("╚" + "═" * 62 + "╝")
     lines.append("")
-    
-    # Results by category
+
     for category, tasks in categories.items():
         cat_passed = sum(1 for t in tasks if t["passed"])
         cat_total = len(tasks)
         cat_points = sum(t["points"] for t in tasks)
         cat_max = sum(t["task"].points for t in tasks)
-        
-        status_icon = "✅" if cat_passed == cat_total else "🔸" if cat_passed > 0 else "❌"
-        lines.append(f"{status_icon} {category} ({cat_passed}/{cat_total} tasks, {cat_points}/{cat_max} pts)")
+
+        status_icon = (
+            "✅" if cat_passed == cat_total else "🔸" if cat_passed > 0 else "❌"
+        )
+        lines.append(
+            f"{status_icon} {category} ({cat_passed}/{cat_total} tasks, {cat_points}/{cat_max} pts)"
+        )
         lines.append("─" * 62)
-        
+
         for result in tasks:
             for msg in result["messages"]:
                 lines.append(f"   {msg}")
-        
+
         lines.append("")
-    
-    # Score summary
+
     percentage = (total_score / max_score * 100) if max_score > 0 else 0
     passing_score = (max_score * Lab09Config.PASSING_PERCENTAGE) // 100
-    
+
     lines.append("═" * 64)
     lines.append(f"📊 Total Score: {total_score}/{max_score} ({percentage:.0f}%)")
-    lines.append(f"   Passing threshold: {Lab09Config.PASSING_PERCENTAGE}% ({passing_score} pts)")
+    lines.append(
+        f"   Passing threshold: {Lab09Config.PASSING_PERCENTAGE}% ({passing_score} pts)"
+    )
     lines.append("")
-    
+
     passed = total_score >= passing_score
-    
+
     if passed:
         lines.append("🎉 Lab 09 Complete! Workshop Finished!")
         lines.append("")
@@ -1186,8 +1129,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     else:
         lines.append("⚠️  Lab 09 not yet complete.")
         lines.append("")
-        
-        # Provide specific guidance based on what failed
+
         if "B1_env_exists" not in completed_tasks:
             lines.append("🔧 First: Create .env file")
             lines.append("   Example content:")
@@ -1208,27 +1150,22 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             lines.append("🔧 Debug: Services not healthy")
             lines.append("   docker compose ps")
             lines.append("   docker compose logs")
-    
+
     return passed, "\n".join(lines)
 
-
-# ============================================================
-# SECTION 7: Checkpoint Graders
-# ============================================================
 
 def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Checkpoint: Verify only configuration (before starting services).
     """
     lines = []
-    lines.append("╔" + "═"*52 + "╗")
+    lines.append("╔" + "═" * 52 + "╗")
     lines.append("║" + "  Checkpoint: Configuration Validation  ".center(52) + "║")
-    lines.append("╚" + "═"*52 + "╝")
+    lines.append("╚" + "═" * 52 + "╝")
     lines.append("")
-    
+
     all_passed = True
-    
-    # Check .env
+
     env_ok, env_errors = verify_env_file_exists(exercise_path)
     if env_ok:
         lines.append("✅ .env file exists")
@@ -1245,8 +1182,7 @@ def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
         for err in env_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
-    # Check compose uses env vars
+
     compose_ok, compose_errors = verify_compose_uses_env_vars(exercise_path)
     if compose_ok:
         lines.append("✅ docker-compose.yml uses ${VAR} syntax")
@@ -1255,8 +1191,7 @@ def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
         for err in compose_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
-    # Check health checks
+
     health_ok, health_errors = verify_healthcheck_defined(exercise_path)
     if health_ok:
         lines.append("✅ Health checks defined")
@@ -1265,8 +1200,7 @@ def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
         for err in health_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
-    # Check restart policies
+
     restart_ok, restart_errors = verify_restart_policies(exercise_path)
     if restart_ok:
         lines.append("✅ Restart policies configured")
@@ -1275,8 +1209,7 @@ def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
         for err in restart_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
-    # Check resource limits
+
     resource_ok, resource_errors = verify_resource_limits(exercise_path)
     if resource_ok:
         lines.append("✅ Resource limits configured")
@@ -1284,17 +1217,16 @@ def grade_checkpoint_config(code: str, exercise_path: Path) -> Tuple[bool, str]:
         lines.append("⚠️  Resource limit issues:")
         for err in resource_errors:
             lines.append(f"   → {err}")
-        # Resource limits are recommended but not required
-    
+
     lines.append("")
-    
+
     if all_passed:
         lines.append("─" * 54)
         lines.append("🎉 Configuration ready!")
         lines.append("   → Start services: docker compose up -d")
         lines.append("   → Then run full grader")
         return True, "\n".join(lines)
-    
+
     lines.append("─" * 54)
     lines.append("⚠️  Fix configuration issues before starting services")
     return False, "\n".join(lines)
@@ -1305,14 +1237,13 @@ def grade_checkpoint_runtime(code: str, exercise_path: Path) -> Tuple[bool, str]
     Checkpoint: Verify runtime status.
     """
     lines = []
-    lines.append("╔" + "═"*52 + "╗")
+    lines.append("╔" + "═" * 52 + "╗")
     lines.append("║" + "  Checkpoint: Runtime Status  ".center(52) + "║")
-    lines.append("╚" + "═"*52 + "╝")
+    lines.append("╚" + "═" * 52 + "╝")
     lines.append("")
-    
+
     all_passed = True
-    
-    # Check services running
+
     running_ok, running_errors = verify_services_running(exercise_path)
     if running_ok:
         lines.append("✅ All services running")
@@ -1321,14 +1252,13 @@ def grade_checkpoint_runtime(code: str, exercise_path: Path) -> Tuple[bool, str]
         for err in running_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
+
     if not running_ok:
         lines.append("")
         lines.append("─" * 54)
         lines.append("⚠️  Start services first: docker compose up -d")
         return False, "\n".join(lines)
-    
-    # Check health
+
     lines.append("")
     lines.append("Checking health status (may take up to 60 seconds)...")
     health_ok, health_errors = verify_services_healthy(exercise_path)
@@ -1339,8 +1269,7 @@ def grade_checkpoint_runtime(code: str, exercise_path: Path) -> Tuple[bool, str]
         for err in health_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
-    # Check endpoints
+
     stack_ok, stack_errors = verify_full_stack_working(exercise_path)
     if stack_ok:
         lines.append("✅ All endpoints responding")
@@ -1349,15 +1278,15 @@ def grade_checkpoint_runtime(code: str, exercise_path: Path) -> Tuple[bool, str]
         for err in stack_errors:
             lines.append(f"   → {err}")
         all_passed = False
-    
+
     lines.append("")
-    
+
     if all_passed:
         lines.append("─" * 54)
         lines.append("🎉 Runtime looks good!")
         lines.append("   → Run full grader for final verification")
         return True, "\n".join(lines)
-    
+
     lines.append("─" * 54)
     lines.append("⚠️  Debug commands:")
     lines.append("   docker compose ps")
@@ -1366,15 +1295,10 @@ def grade_checkpoint_runtime(code: str, exercise_path: Path) -> Tuple[bool, str]
     return False, "\n".join(lines)
 
 
-# ============================================================
-# SECTION 8: Smart Grader
-# ============================================================
-
 def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Smart grading that detects current state and provides appropriate feedback.
     """
-    # Check Docker
     docker_ok, _ = docker_available()
     if not docker_ok:
         return False, (
@@ -1383,11 +1307,10 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "╚════════════════════════════════════════════════════════════╝\n\n"
             "Please ensure Docker Desktop is running."
         )
-    
-    # Check if this looks like Lab 09 directory
+
     compose_file = exercise_path / "docker-compose.yml"
     env_file = exercise_path / ".env"
-    
+
     if not compose_file.exists():
         return False, (
             "╔════════════════════════════════════════════════════════════╗\n"
@@ -1404,8 +1327,7 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "  4. Add restart policies\n"
             "  5. Add resource limits"
         )
-    
-    # Check if .env exists
+
     if not env_file.exists():
         return False, (
             "╔════════════════════════════════════════════════════════════╗\n"
@@ -1420,23 +1342,22 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "  FRONTEND_PORT=8080\n\n"
             "Then run the grader again."
         )
-    
-    # Check if health checks are configured
+
     health_ok, _ = verify_healthcheck_defined(exercise_path)
     restart_ok, _ = verify_restart_policies(exercise_path)
-    
+
     if not health_ok or not restart_ok:
-        return grade_checkpoint_config(grader, code, exercise_path)
-    
-    # Check if services are running
+        return grade_checkpoint_config(code, exercise_path)
+
     success, services, _ = compose_ps(exercise_path)
     running_count = 0
     if success:
         running_count = sum(
-            1 for s in services
+            1
+            for s in services
             if (s.get("State") or s.get("state", "")).lower() in ["running", "up"]
         )
-    
+
     if running_count == 0:
         return False, (
             "╔════════════════════════════════════════════════════════════╗\n"
@@ -1447,9 +1368,8 @@ def grade_smart(code: str, exercise_path: Path) -> Tuple[bool, str]:
             "  docker compose up -d\n\n"
             "Then run this grader again."
         )
-    
+
     if running_count < 3:
-        return grade_checkpoint_runtime(grader, code, exercise_path)
-    
-    # All services running - run full grade
-    return grade(grader, code, exercise_path)
+        return grade_checkpoint_runtime(code, exercise_path)
+
+    return grade(code, exercise_path)

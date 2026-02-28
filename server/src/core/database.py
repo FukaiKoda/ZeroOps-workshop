@@ -5,6 +5,7 @@ from pathlib import Path
 from ..models.user import UserProfile, ExerciseHistory
 from ..models.exercise import ExerciseMetadata, ExerciseState
 
+
 class JSONDatabase:
     def __init__(self, data_dir: str = "data"):
         self.data_dir = Path(data_dir)
@@ -17,7 +18,7 @@ class JSONDatabase:
         user_file = self.users_dir / f"{user_id}.json"
         if not user_file.exists():
             return None
-        
+
         try:
             with open(user_file, "r") as f:
                 data = json.load(f)
@@ -34,10 +35,10 @@ class JSONDatabase:
     def get_exercise_meta(self, level: int, ex_id: str) -> Optional[ExerciseMetadata]:
         level_dir = self.exercises_dir / f"level_{level:02d}"
         meta_file = level_dir / ex_id / "meta.json"
-        
+
         if not meta_file.exists():
             return None
-            
+
         try:
             with open(meta_file, "r") as f:
                 data = json.load(f)
@@ -50,49 +51,47 @@ class JSONDatabase:
         for level_dir in sorted(self.exercises_dir.iterdir()):
             if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
                 continue
-                
+
             exercise_path = level_dir / ex_id
             if exercise_path.exists():
                 meta = self.get_exercise_meta(int(level_dir.name.split("_")[1]), ex_id)
                 if not meta:
                     return None
-                    
+
                 subject_file = exercise_path / "subject.md"
                 subject_content = ""
                 if subject_file.exists():
                     with open(subject_file, "r") as f:
                         subject_content = f.read()
-                        
-                return {
-                    "meta": meta,
-                    "subject": subject_content
-                }
+
+                return {"meta": meta, "subject": subject_content}
         return None
 
     def get_exercise_path(self, ex_id: str) -> Optional[Path]:
         """Returns the absolute path to the directory of an exercise."""
         for level_dir in sorted(self.exercises_dir.iterdir()):
-             if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
-                 continue
-             
-             exercise_path = level_dir / ex_id
-             if exercise_path.exists():
-                 return exercise_path
+            if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
+                continue
+
+            exercise_path = level_dir / ex_id
+            if exercise_path.exists():
+                return exercise_path
         return None
 
-    def update_user_progress(self, user_id: str, history_entry: ExerciseHistory) -> Optional[UserProfile]:
+    def update_user_progress(
+        self, user_id: str, history_entry: ExerciseHistory
+    ) -> Optional[UserProfile]:
         user = self.get_user(user_id)
         if not user:
             return None
-        
+
         user.history.append(history_entry)
-        
+
         user.progress[history_entry.ex_id] = history_entry.status
-        
+
         if history_entry.status == ExerciseState.SOLVED:
             found_meta = None
-            exercise_level = None
-            
+
             for level_dir in self.exercises_dir.iterdir():
                 if level_dir.is_dir() and level_dir.name.startswith("level_"):
                     potential_path = level_dir / history_entry.ex_id / "meta.json"
@@ -100,27 +99,28 @@ class JSONDatabase:
                         try:
                             with open(potential_path, "r") as f:
                                 found_meta = ExerciseMetadata(**json.load(f))
-                            exercise_level = int(level_dir.name.split("_")[1])
+                            int(level_dir.name.split("_")[1])
                             break
-                        except:
+                        except Exception:
                             pass
-            
+
             if found_meta:
                 user.total_xp += found_meta.points
-            
+
             current_level_dir = self.exercises_dir / f"level_{user.current_level:02d}"
             if current_level_dir.exists():
                 all_exercises = [
-                    item.name for item in current_level_dir.iterdir() 
+                    item.name
+                    for item in current_level_dir.iterdir()
                     if item.is_dir() and item.name.startswith("ex")
                 ]
-                
+
                 all_solved = True
                 for ex_id in all_exercises:
                     if user.progress.get(ex_id) != ExerciseState.SOLVED:
                         all_solved = False
                         break
-                
+
                 if all_solved and all_exercises:
                     user.current_level += 1
 
@@ -137,6 +137,7 @@ class JSONDatabase:
             except Exception as e:
                 print(f"Error loading user {user_file}: {e}")
         return users
+
 
 DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
 db = JSONDatabase(os.getenv("DATA_DIR", str(DEFAULT_DATA_DIR)))

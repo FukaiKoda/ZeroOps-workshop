@@ -9,6 +9,7 @@ import webbrowser
 from .modals import QuitScreen, SubmissionResultScreen
 from .leaderboard import Leaderboard
 
+
 class Dashboard(Screen):
     """Main dashboard showing user progress."""
 
@@ -79,33 +80,28 @@ class Dashboard(Screen):
             self.notify(f"Opening {event.href}...", severity="information")
             webbrowser.open(event.href)
 
-
     def compose(self) -> ComposeResult:
         yield Header()
-        
-        # Top Bar with User Info
+
         yield Container(
             Label(f"User: {settings.USER_ID}", id="user-label"),
             Static("Level: ...", id="status-label", classes="stat"),
             Static("Exercise: ...", id="exercise-label", classes="stat"),
             Static("Rendu: ...", id="rendu-label", classes="stat"),
-            id="top-bar"
+            id="top-bar",
         )
 
-        # Main Subject Area (Big Container)
         yield ScrollableContainer(
-            Markdown("Loading subject...", id="subject-md"),
-            id="subject"
+            Markdown("Loading subject...", id="subject-md"), id="subject"
         )
-        
-        # Bottom Actions
+
         yield Container(
             Button("Submit", variant="primary", id="submit"),
             Button("Leaderboard", variant="primary", id="leaderboard"),
             Button("Quit", variant="primary", id="quit"),
-            id="actions"
+            id="actions",
         )
-        
+
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -129,58 +125,69 @@ class Dashboard(Screen):
             data = {"status": "error", "message": "Failed to connect to server."}
         finally:
             await client.close()
-        
+
         if data.get("status") == "ok":
-            # Unlock UI
             self.query_one("#subject").styles.display = "block"
             self.query_one("#submit").disabled = False
-            
-            self.query_one("#status-label", Static).update(f"Level: {data.get('current_level')}")
-            ex_id = data.get('current_exercise')
-            self.query_one("#exercise-label", Static).update(f"Exercise: {ex_id or 'None'}")
-            self.query_one("#rendu-label", Static).update(f"Rendu: ~/rendudevops/{ex_id or '...'}")
+
+            self.query_one("#status-label", Static).update(
+                f"Level: {data.get('current_level')}"
+            )
+            ex_id = data.get("current_exercise")
+            self.query_one("#exercise-label", Static).update(
+                f"Exercise: {ex_id or 'None'}"
+            )
+            self.query_one("#rendu-label", Static).update(
+                f"Rendu: ~/rendudevops/{ex_id or '...'}"
+            )
             self.current_exercise = ex_id
-            
+
             if ex_id:
                 client = ZeroOpsClient()
                 try:
                     details = await client.get_exercise_details(ex_id)
                 except Exception as e:
-                    self.notify(f"Failed to load exercise details: {e}", severity="error")
+                    self.notify(
+                        f"Failed to load exercise details: {e}", severity="error"
+                    )
                     details = {}
                 finally:
                     await client.close()
-                
-                self.query_one("#subject-md", Markdown).update(details.get("subject", "No subject."))
-                
+
+                self.query_one("#subject-md", Markdown).update(
+                    details.get("subject", "No subject.")
+                )
+
                 self._ensure_workspace_ready(ex_id)
             else:
-                 self.query_one("#subject-md", Markdown).update("No active exercise.")
+                self.query_one("#subject-md", Markdown).update("No active exercise.")
         else:
-            self.query_one("#status-label", Static).update(f"Error: {data.get('message', 'Unknown')}")
-
-
+            self.query_one("#status-label", Static).update(
+                f"Error: {data.get('message', 'Unknown')}"
+            )
 
     def _ensure_workspace_ready(self, ex_id: str) -> None:
         """Ensure local workspace directories exist."""
-        # Create ~/rendudevops if not exists
         if not settings.RENDU_DIR.exists():
-                try:
-                    settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
-                    self.notify(f"Created workspace at {settings.RENDU_DIR}", severity="information")
-                except Exception as e:
-                    self.notify(f"Could not create workspace: {e}", severity="error")
+            try:
+                settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
+                self.notify(
+                    f"Created workspace at {settings.RENDU_DIR}", severity="information"
+                )
+            except Exception as e:
+                self.notify(f"Could not create workspace: {e}", severity="error")
 
-        # Create exercise dir
         ex_dir = settings.RENDU_DIR / ex_id
         if not ex_dir.exists():
-                try:
-                    ex_dir.mkdir(exist_ok=True)
-                    self.notify(f"Created directory for {ex_id}", severity="information")
-                except Exception as e:
-                    self.notify(f"Could not create exercise dir: {e}", severity="error")
+            try:
+                ex_dir.mkdir(exist_ok=True)
+                self.notify(f"Created directory for {ex_id}", severity="information")
+            except Exception as e:
+                self.notify(f"Could not create exercise dir: {e}", severity="error")
 
-    def _collect_exercise_code(self, exercise_dir, target_files, exercise_type) -> tuple[str, list]:
+    def _collect_exercise_code(
+        self, exercise_dir, target_files, exercise_type
+    ) -> tuple[str, list]:
         """Read and concatenate all relevant exercise files."""
         code_parts = []
         files_found = []
@@ -188,21 +195,19 @@ class Dashboard(Screen):
         def read_file(path):
             try:
                 with open(path, "r") as f:
-                     return f.read()
+                    return f.read()
             except Exception as e:
                 self.notify(f"Error reading {path.name}: {e}", severity="error")
                 return None
 
-        # 1. Target files
         for target in target_files:
             file_path = exercise_dir / target
             if file_path.exists():
                 files_found.append(target)
                 content = read_file(file_path)
                 if content is not None:
-                     code_parts.append(content)
+                    code_parts.append(content)
 
-        # 2. Kubernetes wildcards
         if exercise_type == "kubernetes":
             for ext in ["*.yaml", "*.yml"]:
                 for fpath in exercise_dir.glob(ext):
@@ -220,8 +225,7 @@ class Dashboard(Screen):
             return
 
         self.notify(f"Submitting {self.current_exercise}...", severity="information")
-        
-        # Get exercise details to determine file type
+
         client = ZeroOpsClient()
         details = {}
         try:
@@ -231,40 +235,42 @@ class Dashboard(Screen):
             return
         finally:
             await client.close()
-        
+
         exercise_type = details.get("type", "python")
-        
-        # Determine target files based on exercise type
+
         target_files = self._get_target_files(exercise_type)
-        
+
         exercise_dir = settings.RENDU_DIR / self.current_exercise
-        
-        code_to_submit, files_found = self._collect_exercise_code(exercise_dir, target_files, exercise_type)
-        
+
+        code_to_submit, files_found = self._collect_exercise_code(
+            exercise_dir, target_files, exercise_type
+        )
+
         if target_files and not files_found:
             expected = ", ".join(target_files)
             self.notify(f"No files found. Expected: {expected}", severity="error")
             return
-        
+
         client = ZeroOpsClient()
         try:
-            data = await client.submit_exercise(self.current_exercise, code=code_to_submit)
+            data = await client.submit_exercise(
+                self.current_exercise, code=code_to_submit
+            )
         except Exception as e:
             self.notify(f"Submission failed: {e}", severity="error")
             return
         finally:
             await client.close()
-        
+
         is_success = data.get("status") == "success"
         message = data.get("message", "Unknown result")
-        
-        # Show detailed result in modal
-        self.app.push_screen(SubmissionResultScreen(
-            success=is_success,
-            message=message,
-            exercise_id=self.current_exercise
-        ))
-        
+
+        self.app.push_screen(
+            SubmissionResultScreen(
+                success=is_success, message=message, exercise_id=self.current_exercise
+            )
+        )
+
         if is_success:
             await self.refresh_status()
 
@@ -274,9 +280,16 @@ class Dashboard(Screen):
             "python": ["main.py"],
             "docker": ["Dockerfile"],
             "kubernetes": [
-                "deployment.yaml", "service.yaml", "pod.yaml", 
-                "configmap.yaml", "secret.yaml", "ingress.yaml",
-                "pv.yaml", "pvc.yaml", "namespace.yaml", "replicaset.yaml"
+                "deployment.yaml",
+                "service.yaml",
+                "pod.yaml",
+                "configmap.yaml",
+                "secret.yaml",
+                "ingress.yaml",
+                "pv.yaml",
+                "pvc.yaml",
+                "namespace.yaml",
+                "replicaset.yaml",
             ],
             "docker-compose": ["docker-compose.yaml", "docker-compose.yml"],
             "prometheus": ["prometheus.yml", "prometheus.yaml", "alerting-rules.yml"],

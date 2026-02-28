@@ -1,23 +1,27 @@
 from fastapi import FastAPI
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from .core.config import settings
+from .core.rate_limit import limiter
+from .api import endpoints
 
 app = FastAPI(title="ZeroOps Server")
 
+
 @app.get("/")
 async def root():
-    return {"status": "ok", "message": "ZeroOps Server is running", "env": settings.DEBUG}
+    return {
+        "status": "ok",
+        "message": "ZeroOps Server is running",
+        "env": settings.DEBUG,
+    }
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-from .api import endpoints
-
-# Rate Limiting
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from .core.rate_limit import limiter
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

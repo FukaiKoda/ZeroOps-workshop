@@ -33,7 +33,15 @@ def _image_exists(image: str) -> bool:
 
 def _hello_world_container_id() -> Optional[str]:
     code, out, _ = _run_command(
-        ["docker", "ps", "-a", "--filter", "ancestor=hello-world", "--format", "{{.ID}}"]
+        [
+            "docker",
+            "ps",
+            "-a",
+            "--filter",
+            "ancestor=hello-world",
+            "--format",
+            "{{.ID}}",
+        ]
     )
     if code != 0:
         return None
@@ -69,9 +77,14 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
         if not logs:
             errors.append("Could not read logs from the hello-world container.")
         elif "Hello from Docker!" not in logs:
-            errors.append("Expected output not found in container logs. Make sure you run hello-world.")
+            errors.append(
+                "Expected output not found in container logs. Make sure you run hello-world."
+            )
 
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
 
-    return True, "✅ Great! Docker is working and the hello-world image ran successfully."
+    return (
+        True,
+        "✅ Great! Docker is working and the hello-world image ran successfully.",
+    )

@@ -4,17 +4,17 @@ from textual.screen import Screen
 from textual.widgets import Button, Label, Header, Footer
 from api.client import ZeroOpsClient
 
+
 class LeaderboardCard(Container):
     """A card for a single leaderboard entry."""
-    
+
     def __init__(self, rank: int, user_id: str, xp: int, level: int):
         super().__init__()
         self.rank = rank
         self.user_id = user_id
         self.xp = xp
         self.level = level
-        
-        # Determine classes based on rank
+
         self.add_class("lb-card")
         if rank == 1:
             self.add_class("rank-1")
@@ -26,10 +26,8 @@ class LeaderboardCard(Container):
             self.add_class("rank-other")
 
     def compose(self) -> ComposeResult:
-        # Rank badge
         yield Label(f"#{self.rank}", classes="lb-rank")
-        
-        # Rank Icons
+
         icon = ""
         if self.rank == 1:
             icon = "👑"
@@ -37,18 +35,14 @@ class LeaderboardCard(Container):
             icon = "🥈"
         elif self.rank == 3:
             icon = "🥉"
-            
+
         if icon:
             yield Label(icon, classes="crown")
 
-        # Avatar (Placeholder for TUI)
-        # Using a large character or ASCII art. 
-        # Ideally we would fetch and render the image using a library, but for stability in a standard TUI:
-        yield Center(Label("👤", classes="lb-avatar")) 
-        
-        # User Info
+        yield Center(Label("👤", classes="lb-avatar"))
+
         yield Label(f"{self.user_id}", classes="lb-user")
-        
+
         yield Label(f"{self.xp} XP", classes="lb-xp")
         yield Label(f"Level {self.level}", classes="lb-level")
 
@@ -224,23 +218,22 @@ class Leaderboard(Screen):
     """
 
     def compose(self) -> ComposeResult:
-        yield Header() 
+        yield Header()
         yield Container(
             Container(
-                Button("← Back", variant="default", id="back-btn"),
-                id="lb-header"
+                Button("← Back", variant="default", id="back-btn"), id="lb-header"
             ),
             Label("Global Leaderboard", classes="title"),
             Container(id="podium"),
             Container(id="rest-list"),
-            id="lb-container"
+            id="lb-container",
         )
         yield Footer()
 
     async def on_mount(self) -> None:
         podium = self.query_one("#podium")
         rest_list = self.query_one("#rest-list")
-        
+
         client = ZeroOpsClient()
         try:
             data = await client.get_leaderboard()
@@ -249,52 +242,49 @@ class Leaderboard(Screen):
             data = []
         finally:
             await client.close()
-        
-        # Sort so that rank 1 is in middle for visual podium
-        # Data is already sorted by rank 1..N
-        
-        # Top 3
+
         top_3 = data[:3]
         others = data[3:]
-        
-        # Create Podium Cards
-        # We want order: 2, 1, 3 for visual effect (Left, Center, Right)
-        
+
         podium_entries = []
-        if len(top_3) >= 1: podium_entries.append((1, top_3[0]))
-        if len(top_3) >= 2: podium_entries.append((2, top_3[1]))
-        if len(top_3) >= 3: podium_entries.append((3, top_3[2]))
-        
-        # Reorder for visual: 2, 1, 3
+        if len(top_3) >= 1:
+            podium_entries.append((1, top_3[0]))
+        if len(top_3) >= 2:
+            podium_entries.append((2, top_3[1]))
+        if len(top_3) >= 3:
+            podium_entries.append((3, top_3[2]))
+
         visual_order = []
-        # Find rank 2
         r2 = next((x for x in podium_entries if x[0] == 2), None)
-        if r2: visual_order.append(r2)
-        
-        # Find rank 1
+        if r2:
+            visual_order.append(r2)
+
         r1 = next((x for x in podium_entries if x[0] == 1), None)
-        if r1: visual_order.append(r1)
-        
-        # Find rank 3
+        if r1:
+            visual_order.append(r1)
         r3 = next((x for x in podium_entries if x[0] == 3), None)
-        if r3: visual_order.append(r3)
-        
+        if r3:
+            visual_order.append(r3)
+
         for rank, entry in visual_order:
-            podium.mount(LeaderboardCard(
-                rank=rank,
-                user_id=entry.get("user_id"),
-                xp=entry.get("total_xp"),
-                level=entry.get("level")
-            ))
-            
-        # Others
+            podium.mount(
+                LeaderboardCard(
+                    rank=rank,
+                    user_id=entry.get("user_id"),
+                    xp=entry.get("total_xp"),
+                    level=entry.get("level"),
+                )
+            )
+
         for i, entry in enumerate(others, 4):
-             rest_list.mount(LeaderboardCard(
-                rank=i,
-                user_id=entry.get("user_id"),
-                xp=entry.get("total_xp"),
-                level=entry.get("level")
-            ))
+            rest_list.mount(
+                LeaderboardCard(
+                    rank=i,
+                    user_id=entry.get("user_id"),
+                    xp=entry.get("total_xp"),
+                    level=entry.get("level"),
+                )
+            )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id in ("back", "back-btn"):

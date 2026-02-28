@@ -5,8 +5,6 @@ from typing import Optional, Tuple, Dict, Any
 import subprocess
 import json
 
-
-# Default index.html content to auto-create for the user
 DEFAULT_INDEX_HTML = """<!DOCTYPE html>
 <html>
 <head>
@@ -33,7 +31,7 @@ def _ensure_index_html(rendu_path: Path) -> None:
             rendu_path.mkdir(parents=True, exist_ok=True)
             index_path.write_text(DEFAULT_INDEX_HTML)
         except Exception:
-            pass  # Will be caught later in validation
+            pass
 
 
 def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
@@ -96,57 +94,55 @@ def _get_image_history(image: str) -> Tuple[bool, list, str]:
 def _validate_dockerfile(dockerfile_path: Path) -> Tuple[bool, list[str]]:
     """Validate the Dockerfile content and return list of errors."""
     errors = []
-    
+
     if not dockerfile_path.exists():
         return False, ["Dockerfile not found"]
-    
+
     try:
         content = dockerfile_path.read_text()
     except Exception as e:
         return False, [f"Could not read Dockerfile: {e}"]
-    
+
     lines = content.strip().splitlines()
-    
-    # Normalize: remove comments and empty lines for validation
+
     instructions = []
     for line in lines:
         stripped = line.strip()
         if stripped and not stripped.startswith("#"):
             instructions.append(stripped)
-    
+
     if not instructions:
         return False, ["Dockerfile is empty"]
-    
-    # Check FROM instruction
+
     from_found = False
     for inst in instructions:
         if inst.upper().startswith("FROM"):
             from_found = True
-            # Check if it uses nginx:alpine
             if "nginx:alpine" not in inst.lower():
-                errors.append("FROM instruction should use 'nginx:alpine' as the base image")
+                errors.append(
+                    "FROM instruction should use 'nginx:alpine' as the base image"
+                )
             break
-    
+
     if not from_found:
         errors.append("Missing FROM instruction")
-    
-    # Check COPY instruction
+
     copy_found = False
     copy_correct = False
     for inst in instructions:
         if inst.upper().startswith("COPY"):
             copy_found = True
-            # Check if copying index.html to the correct location
             if "index.html" in inst and "/usr/share/nginx/html" in inst:
                 copy_correct = True
             break
-    
+
     if not copy_found:
         errors.append("Missing COPY instruction")
     elif not copy_correct:
-        errors.append("COPY instruction should copy index.html to /usr/share/nginx/html/")
-    
-    # Check EXPOSE instruction
+        errors.append(
+            "COPY instruction should copy index.html to /usr/share/nginx/html/"
+        )
+
     expose_found = False
     expose_80 = False
     for inst in instructions:
@@ -155,40 +151,33 @@ def _validate_dockerfile(dockerfile_path: Path) -> Tuple[bool, list[str]]:
             if "80" in inst:
                 expose_80 = True
             break
-    
+
     if not expose_found:
         errors.append("Missing EXPOSE instruction")
     elif not expose_80:
         errors.append("EXPOSE instruction should document port 80")
-    
-    # Check CMD instruction (optional but recommended for nginx foreground)
-    cmd_found = False
+
     for inst in instructions:
         if inst.upper().startswith("CMD"):
-            cmd_found = True
             break
-    
-    # CMD is inherited from nginx:alpine, so it's optional
-    # But we can note if they explicitly set it
-    
+
     return len(errors) == 0, errors
 
 
 def _validate_index_html(index_path: Path) -> Tuple[bool, list[str]]:
     """Validate that index.html exists and has content."""
     errors = []
-    
-    # index.html is auto-created, so it should always exist
+
     if not index_path.exists():
         return False, ["index.html not found (should have been auto-created)"]
-    
+
     try:
         content = index_path.read_text()
         if not content.strip():
             errors.append("index.html is empty")
     except Exception as e:
         return False, [f"Could not read index.html: {e}"]
-    
+
     return len(errors) == 0, errors
 
 
@@ -196,23 +185,19 @@ def _validate_built_image() -> Tuple[bool, list[str]]:
     """Validate that web-artifact:v1 image is built correctly."""
     errors = []
     image_tag = "web-artifact:v1"
-    
-    # Check image exists
+
     if not _image_exists(image_tag):
         return False, [f"Image '{image_tag}' not found. Did you build it"]
-    
-    # Inspect image
+
     ok, config, err = _inspect_image(image_tag)
     if not ok:
         errors.append(f"Could not inspect image: {err}")
         return False, errors
-    
-    # Check exposed ports
+
     exposed_ports = config.get("Config", {}).get("ExposedPorts", {})
     if "80/tcp" not in exposed_ports:
         errors.append("Image should have port 80 exposed (EXPOSE 80)")
-    
-    # Check image history for COPY layer
+
     ok, history, err = _get_image_history(image_tag)
     if ok:
         copy_layer_found = False
@@ -222,18 +207,14 @@ def _validate_built_image() -> Tuple[bool, list[str]]:
                 break
         if not copy_layer_found:
             errors.append("Image history doesn't show a COPY layer for index.html")
-    
-    # Check the base image
-    # The image should be based on nginx:alpine
-    # We can check the history for the FROM layer
-    
+
     return len(errors) == 0, errors
 
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     Grade ex03_docker_the_blueprint.
-    
+
     Validates:
     1. Dockerfile exists with correct instructions
     2. index.html exists
@@ -242,52 +223,43 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     """
     all_errors = []
     warnings = []
-    
-    # Check Docker availability
+
     ok, info = _docker_available()
     if not ok:
         return False, f"Docker is not available: {info}"
-    
-    # Determine submission directory
+
     rendu_path = _rendu_dir(exercise_path)
-    
-    # Create rendu directory if it doesn't exist
+
     if not rendu_path.exists():
         try:
             rendu_path.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             all_errors.append(f"Could not create submission directory: {e}")
             return False, "Validation failed:\n- " + "\n- ".join(all_errors)
-    
-    # Auto-create index.html if it doesn't exist (provided for the user)
+
     _ensure_index_html(rendu_path)
-    
+
     dockerfile_path = rendu_path / "Dockerfile"
     index_path = rendu_path / "index.html"
-    
-    # === Step 1: Validate Dockerfile ===
-    
+
     df_ok, df_errors = _validate_dockerfile(dockerfile_path)
     if not df_ok:
         all_errors.extend(df_errors)
-    
-    # === Step 2: Validate index.html ===
+
     idx_ok, idx_errors = _validate_index_html(index_path)
     if not idx_ok:
         all_errors.extend(idx_errors)
-    
-    # === Step 3: Validate built image ===
+
     img_ok, img_errors = _validate_built_image()
     if not img_ok:
         all_errors.extend(img_errors)
-    
-    # === Build final result ===
+
     if all_errors:
         error_msg = "Validation failed:\n- " + "\n- ".join(all_errors)
         if warnings:
             error_msg += "\n\nWarnings:\n- " + "\n- ".join(warnings)
         return False, error_msg
-    
+
     success_msg = """✅ Excellent work! Your Dockerfile is correct!
 
 You've successfully:
@@ -297,5 +269,5 @@ You've successfully:
 • Built the image as web-artifact:v1
 
 Your custom web artifact is ready for deployment! 🚀"""
-    
+
     return True, success_msg
