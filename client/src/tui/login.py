@@ -6,6 +6,7 @@ from utils.config import settings
 
 from .dashboard import Dashboard
 
+
 class LoginScreen(Screen):
     """Screen for simple user id entry."""
 
@@ -42,7 +43,7 @@ class LoginScreen(Screen):
         width: 100%;
     }
     """
-    
+
     def compose(self) -> ComposeResult:
         yield Header()
         yield Container(
@@ -50,21 +51,21 @@ class LoginScreen(Screen):
             Label("Enter your User ID to continue.", classes="instruction"),
             Input(placeholder="User ID (e.g., student1)", id="user-input"),
             Button("Login", variant="primary", id="login-btn"),
-            id="login-container"
+            id="login-container",
         )
         yield Footer()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "login-btn":
             self.do_login()
-            
+
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.do_login()
 
     def do_login(self) -> None:
         user_input = self.query_one("#user-input", Input)
         user_id = user_input.value.strip()
-        
+
         if user_id:
             settings.USER_ID = user_id
             self.notify(f"Welcome, {user_id}!", severity="success")

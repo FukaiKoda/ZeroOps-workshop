@@ -4,6 +4,7 @@ from utils.config import settings
 
 from utils.executor import LocalGrader
 
+
 class ZeroOpsClient:
     def __init__(self):
         self.base_url = settings.ZEROOPS_SERVER_URL
@@ -23,7 +24,11 @@ class ZeroOpsClient:
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-             return {"id": exercise_id, "subject": f"Error loading subject: {e}", "points": 0}
+            return {
+                "id": exercise_id,
+                "subject": f"Error loading subject: {e}",
+                "points": 0,
+            }
 
     async def get_leaderboard(self) -> list[Dict[str, Any]]:
         try:
@@ -37,13 +42,13 @@ class ZeroOpsClient:
         payload = {
             "user_id": settings.USER_ID,
             "exercise_id": exercise_id,
-            "code": code
+            "code": code,
         }
         try:
             response = await self.client.post("/v1/grade", json=payload)
             response.raise_for_status()
             data = response.json()
-            
+
             if data.get("status") == "pending" and "script_content" in data:
                 script = data["script_content"]
                 nonce = data["nonce"]
@@ -52,23 +57,32 @@ class ZeroOpsClient:
                 if not target_dir.exists():
                     pass
 
-                success, logs = LocalGrader.execute_script(script, nonce, target_dir=target_dir)
+                success, logs = LocalGrader.execute_script(
+                    script, nonce, target_dir=target_dir
+                )
 
                 verify_payload = {
                     "user_id": settings.USER_ID,
                     "nonce": nonce,
                     "result": success,
-                    "logs": logs
+                    "logs": logs,
                 }
-                
-                verify_response = await self.client.post("/v1/verify", json=verify_payload)
+
+                verify_response = await self.client.post(
+                    "/v1/verify", json=verify_payload
+                )
                 verify_response.raise_for_status()
                 return verify_response.json()
-                
+
             return data
-            
+
         except httpx.HTTPError as e:
-            return {"status": "error", "message": f"Submission failed: {str(e)}", "new_level": -1, "score": 0}
+            return {
+                "status": "error",
+                "message": f"Submission failed: {str(e)}",
+                "new_level": -1,
+                "score": 0,
+            }
 
     async def close(self):
         await self.client.aclose()

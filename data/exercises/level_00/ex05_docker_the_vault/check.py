@@ -22,7 +22,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-
 VOLUME_NAME = "grademe-db-data"
 OLD_CONTAINER = "grademe-db"
 NEW_CONTAINER = "grademe-db-new"
@@ -81,7 +80,9 @@ def _run_command(args: list[str], timeout: int = 10) -> Tuple[int, str, str]:
 
 
 def _docker_available() -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=5)
+    code, out, err = _run_command(
+        ["docker", "info", "--format", "{{.ServerVersion}}"], timeout=5
+    )
     if code != 0:
         return False, err or out or "Docker is not available"
     return True, out
@@ -123,7 +124,9 @@ def _inspect_container(name: str) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         return False, None, f"Failed to parse docker inspect JSON: {e}"
 
 
-def _has_named_volume_mount(inspected: Dict[str, Any], volume_name: str, dest: str) -> Tuple[bool, str]:
+def _has_named_volume_mount(
+    inspected: Dict[str, Any], volume_name: str, dest: str
+) -> Tuple[bool, str]:
     mounts = inspected.get("Mounts", [])
     if not isinstance(mounts, list):
         return False, "Could not read container mounts"
@@ -146,9 +149,7 @@ def _has_named_volume_mount(inspected: Dict[str, Any], volume_name: str, dest: s
 
 
 def _exec_psql_count(container: str) -> Tuple[bool, str]:
-    cmd = (
-        "SELECT COUNT(*) FROM submissions;"
-    )
+    cmd = "SELECT COUNT(*) FROM submissions;"
     code, out, err = _run_command(
         [
             "docker",
@@ -173,7 +174,6 @@ def _exec_psql_count(container: str) -> Tuple[bool, str]:
     if not value:
         return False, "psql returned empty output"
 
-    # psql -t -A should output only a number, but be defensive.
     try:
         count = int(value.splitlines()[-1].strip())
     except ValueError:
@@ -186,9 +186,8 @@ def _exec_psql_count(container: str) -> Tuple[bool, str]:
 
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
-    # Ensure init.sql file exists in user's exercise directory
     _ensure_init_sql(exercise_path)
-    
+
     errors: list[str] = []
 
     ok, info = _docker_available()
@@ -197,9 +196,7 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
 
     ok, err = _volume_exists(VOLUME_NAME)
     if not ok:
-        errors.append(
-            f"Named volume '{VOLUME_NAME}' not found."
-        )
+        errors.append(f"Named volume '{VOLUME_NAME}' not found.")
 
     if _container_exists(OLD_CONTAINER):
         errors.append(
@@ -211,11 +208,8 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             f"Container '{NEW_CONTAINER}' not found. Create it from postgres:15-alpine with the volume mounted."
         )
     elif not _container_running(NEW_CONTAINER):
-        errors.append(
-            f"Container '{NEW_CONTAINER}' exists but is not running."
-        )
+        errors.append(f"Container '{NEW_CONTAINER}' exists but is not running.")
     else:
-        # Container exists and is running - now verify mount and data
         ok, inspected, inspect_err = _inspect_container(NEW_CONTAINER)
         if not ok or not inspected:
             errors.append(f"Could not inspect '{NEW_CONTAINER}': {inspect_err}")
@@ -224,7 +218,6 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
             if not ok:
                 errors.append(mount_err)
             else:
-                # Volume mount is correct - now verify data persistence via SQL query
                 ok, qerr = _exec_psql_count(NEW_CONTAINER)
                 if not ok:
                     errors.append(

@@ -3,6 +3,7 @@ from textual.containers import Grid, Container, ScrollableContainer
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
 
+
 class SubmissionResultScreen(ModalScreen):
     """Modal screen to display submission results with details."""
 
@@ -58,16 +59,21 @@ class SubmissionResultScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         title_class = "success" if self.success else "failure"
-        title_text = "✅ Submission Successful!" if self.success else "❌ Submission Failed"
-        
+        title_text = (
+            "✅ Submission Successful!" if self.success else "❌ Submission Failed"
+        )
+
         yield Container(
             Label(title_text, id="result-title", classes=title_class),
             Label(f"Exercise: {self.exercise_id}", id="result-exercise"),
             ScrollableContainer(
-                Static(self.message, id="result-message-text"),
-                id="result-message"
+                Static(self.message, id="result-message-text"), id="result-message"
             ),
-            Button("Close", variant="primary" if self.success else "error", id="result-close"),
+            Button(
+                "Close",
+                variant="primary" if self.success else "error",
+                id="result-close",
+            ),
             id="result-dialog",
         )
 

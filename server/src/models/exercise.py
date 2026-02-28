@@ -2,6 +2,7 @@ from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel
 
+
 class ExerciseState(str, Enum):
     LOCKED = "locked"
     UNLOCKED = "unlocked"
@@ -16,10 +17,11 @@ class ExerciseType(str, Enum):
     GRAFANA = "grafana"
     INTERACTIVE = "interactive"
 
+
 class ExerciseMetadata(BaseModel):
     id: str
     points: int
     requirements: List[str] = []
     setup_script: Optional[str] = None
     test_suite: str = "test_suite.py"
-    type: ExerciseType = ExerciseType.DOCKER # Default type
+    type: ExerciseType = ExerciseType.DOCKER
