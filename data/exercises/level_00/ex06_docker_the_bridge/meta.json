@@ -1,7 +1,0 @@
-{
-  "id": "ex06_docker_the_bridge",
-  "title": "The Bridge",
-  "points": 20,
-  "requirements": ["ex05_docker_the_vault"],
-  "type": "interactive"
-}
