@@ -16,6 +16,7 @@ class ExerciseType(str, Enum):
     PROMETHEUS = "prometheus"
     GRAFANA = "grafana"
     INTERACTIVE = "interactive"
+    GITHUB_ACTIONS = "github_actions"
 
 
 class ExerciseMetadata(BaseModel):

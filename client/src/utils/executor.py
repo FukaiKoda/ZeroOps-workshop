@@ -30,6 +30,10 @@ from pathlib import Path
 cwd = Path.cwd()
 code = ""
 yaml_files = sorted([f for f in cwd.glob("*.yaml")] + [f for f in cwd.glob("*.yml")])
+workflows_dir = cwd / ".github" / "workflows"
+if workflows_dir.exists():
+    yaml_files += sorted([f for f in workflows_dir.glob("*.yaml")] + [f for f in workflows_dir.glob("*.yml")])
+
 if yaml_files:
     content_list = []
     for f in yaml_files:

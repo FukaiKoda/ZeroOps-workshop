@@ -492,6 +492,18 @@ class Dashboard(Screen):
                         if content is not None:
                             code_parts.append(content)
 
+        if exercise_type == "github_actions":
+            workflows_dir = exercise_dir / ".github" / "workflows"
+            if workflows_dir.exists():
+                for ext in ["*.yaml", "*.yml"]:
+                    for fpath in workflows_dir.glob(ext):
+                        rel_name = f".github/workflows/{fpath.name}"
+                        if rel_name not in files_found:
+                            files_found.append(rel_name)
+                            content = read_file(fpath)
+                            if content is not None:
+                                code_parts.append(content)
+
         return "\n---\n".join(code_parts), files_found
 
     def _get_target_files(self, exercise_type: str) -> list:
@@ -512,5 +524,13 @@ class Dashboard(Screen):
             "shell": ["script.sh", "main.sh"],
             "c": ["main.c", "Makefile"],
             "interactive": [],
+            "github_actions": [
+                ".github/workflows/build.yml",
+                ".github/workflows/build.yaml",
+                ".github/workflows/ci.yml",
+                ".github/workflows/ci.yaml",
+                ".github/workflows/main.yml",
+                ".github/workflows/main.yaml",
+            ],
         }
         return file_mapping.get(exercise_type, ["main.py"])
