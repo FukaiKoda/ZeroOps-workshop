@@ -125,7 +125,16 @@ async def oauth_callback(
     session_token = create_session_token(user.id)
 
     # Mark state as complete so the polling client can pick it up
-    complete_state(state, session_token)
+    completed = complete_state(state, session_token)
+    if not completed:
+        return HTMLResponse(
+            _html_result(
+                "Login Session Expired",
+                "Your authorization window expired. Please return to the ZeroOps app and click 'Login with GitHub' again.",
+                False,
+            ),
+            status_code=400,
+        )
 
     return HTMLResponse(
         _html_result(
