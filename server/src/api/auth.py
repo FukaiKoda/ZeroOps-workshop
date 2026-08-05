@@ -13,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from ..core.config import settings
 from ..core.db import get_db
 from ..core.oauth import build_auth_url, exchange_code_for_token, get_github_user, get_github_primary_email
 from ..core.session import create_state_token, complete_state, poll_state, create_session_token, verify_session_token
@@ -61,13 +62,21 @@ async def initiate_login(request: Request):
     Returns a GitHub OAuth authorization URL and a state token.
     The client opens the URL in the system browser and polls /poll/{state}.
     """
-    if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
+    client_id = settings.GITHUB_CLIENT_ID.strip()
+    client_secret = settings.GITHUB_CLIENT_SECRET.strip()
+
+    if (
+        not client_id
+        or not client_secret
+        or "your_client_id" in client_id
+        or "your_client_secret" in client_secret
+    ):
         raise HTTPException(
             status_code=503,
             detail=(
-                "GitHub OAuth is not configured on the server. "
-                "Set ZEROOPS_GITHUB_CLIENT_ID and ZEROOPS_GITHUB_CLIENT_SECRET "
-                "in server/.env and restart the server."
+                "GitHub OAuth App credentials are not configured! "
+                "Please edit 'server/.env' and replace 'your_client_id_here' and 'your_client_secret_here' "
+                "with your actual Client ID and Client Secret from https://github.com/settings/developers."
             ),
         )
     state = create_state_token()
