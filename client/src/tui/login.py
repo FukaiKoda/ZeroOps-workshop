@@ -195,13 +195,18 @@ class LoginScreen(Screen):
 
     async def _on_login_success(self) -> None:
         """Fetch profile and route to the correct screen."""
+        if self._client:
+            await self._client.close()
+            self._client = None
+
+        # Fresh client to pick up saved JWT token header
+        client = ZeroOpsClient()
         try:
-            me = await self._client.get_me()
+            me = await client.get_me()
         except Exception:
             me = {}
         finally:
-            await self._client.aclose()
-            self._client = None
+            await client.close()
 
         settings.USER_ID = me.get("github_username", settings.USER_ID)
         self.notify(
