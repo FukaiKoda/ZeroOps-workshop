@@ -13,6 +13,7 @@ from sqlalchemy import select, func
 from ..core.db import get_db
 from ..core.database import exercise_db
 from ..core.rate_limit import limiter
+from ..core.github_repo import fetch_workflow_files
 from ..models.db_user import User
 from ..models.db_submission import ExerciseSubmission
 from ..models.exercise import ExerciseState, ExerciseType
@@ -121,11 +122,15 @@ async def get_exercise(request: Request, exercise_id: str):
 async def submit_exercise(
     request: Request,
     submission: SubmissionRequest,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Initiates the grading process.
-    Returns the grading script and a nonce for the client to execute locally.
+    - For github_actions exercises: grades server-side by fetching workflow
+      files directly from the student's linked GitHub repository.
+    - For all other exercises: returns the grading script + nonce for
+      the client to execute locally.
     """
     import secrets
 
@@ -147,6 +152,27 @@ async def submit_exercise(
             score=0,
         )
 
+    # -----------------------------------------------------------------
+    # GitHub Actions exercises: server fetches workflow files and grades
+    # directly — no local files needed from the student.
+    # -----------------------------------------------------------------
+    details = exercise_db.get_exercise_details(submission.exercise_id)
+    exercise_type = getattr(details["meta"], "type", None) if details else None
+
+    if exercise_type == ExerciseType.GITHUB_ACTIONS:
+        return await _grade_github_actions(
+            db=db,
+            current_user=current_user,
+            exercise_path=exercise_path,
+            check_script_path=check_script_path,
+            exercise_id=submission.exercise_id,
+            commit_hash=submission.commit_hash,
+            details=details,
+        )
+
+    # -----------------------------------------------------------------
+    # All other exercise types: client-side grading flow
+    # -----------------------------------------------------------------
     try:
         script_content = check_script_path.read_text()
     except Exception as e:
@@ -306,6 +332,111 @@ async def get_submissions(
         )
         for s in submissions
     ]
+
+
+# ---------------------------------------------------------------------------
+# GitHub Actions server-side grader
+# ---------------------------------------------------------------------------
+
+async def _grade_github_actions(
+    db: AsyncSession,
+    current_user: User,
+    exercise_path,
+    check_script_path,
+    exercise_id: str,
+    commit_hash: Optional[str],
+    details: dict,
+) -> SubmissionResponse:
+    """
+    Grade a GitHub Actions exercise fully server-side:
+    1. Fetch .github/workflows/ files from the student's linked repo via GitHub API.
+    2. Concatenate them and pass to check.py's grade() function.
+    3. Persist the result and update XP/level.
+    """
+    import sys
+    import tempfile
+    import importlib.util
+    from pathlib import Path as _Path
+
+    # Ensure the student has a linked repository
+    repo = current_user.repository
+    if not repo:
+        return SubmissionResponse(
+            status="error",
+            message="No repository linked. Please link your GitHub repository first.",
+            new_level=current_user.current_level,
+            score=0,
+        )
+
+    if not current_user.github_access_token:
+        return SubmissionResponse(
+            status="error",
+            message="No GitHub token found. Please log out and log in again.",
+            new_level=current_user.current_level,
+            score=0,
+        )
+
+    # Fetch workflow files from GitHub
+    workflow_files = await fetch_workflow_files(
+        owner=repo.owner,
+        repo=repo.repo,
+        token=current_user.github_access_token,
+    )
+
+    if not workflow_files:
+        return SubmissionResponse(
+            status="failure",
+            message=(
+                "No workflow files found in your repository at .github/workflows/.\n"
+                "Create a workflow YAML file, commit it, and push to GitHub, then try again."
+            ),
+            new_level=current_user.current_level,
+            score=0,
+        )
+
+    # Concatenate all workflow file contents for the grader
+    combined_code = "\n---\n".join(
+        f"# === {name} ===\n{content}"
+        for name, content in workflow_files.items()
+    )
+
+    # Dynamically load check.py and run grade()
+    try:
+        spec = importlib.util.spec_from_file_location("check_module", check_script_path)
+        check_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(check_module)
+        success, feedback = check_module.grade(combined_code, exercise_path)
+    except Exception as e:
+        return SubmissionResponse(
+            status="error",
+            message=f"Grader error: {e}",
+            new_level=current_user.current_level,
+            score=0,
+        )
+
+    score = 100 if success else 0
+    status = "passed" if success else "failed"
+
+    # Persist submission record
+    submission_record = ExerciseSubmission(
+        user_id=current_user.id,
+        exercise_id=exercise_id,
+        status=status,
+        score=score,
+        feedback=feedback,
+        commit_hash=commit_hash,
+    )
+    db.add(submission_record)
+
+    new_level = await _update_user_progress(db, current_user, exercise_id, score)
+    await db.commit()
+
+    return SubmissionResponse(
+        status="success" if success else "failure",
+        message=feedback,
+        new_level=new_level,
+        score=score,
+    )
 
 
 # ---------------------------------------------------------------------------

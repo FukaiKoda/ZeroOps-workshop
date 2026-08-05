@@ -404,19 +404,56 @@ class Dashboard(Screen):
 
         self.notify(f"Submitting {self.current_exercise}...", severity="information")
 
-        # Fetch exercise type to determine which files to collect
+        # Fetch exercise type to determine collection strategy
         client = ZeroOpsClient()
         details = {}
         try:
             details = await client.get_exercise_details(self.current_exercise)
         except Exception as e:
             self.notify(f"Failed to get exercise details: {e}", severity="error")
-            await client.close()
             return
         finally:
             await client.close()
 
         exercise_type = details.get("type", "python")
+
+        # ---------------------------------------------------------------
+        # GitHub Actions: server fetches workflow files from GitHub API.
+        # No local file reading needed.
+        # ---------------------------------------------------------------
+        if exercise_type == "github_actions":
+            client = ZeroOpsClient()
+            try:
+                data = await client.submit_exercise(
+                    self.current_exercise,
+                    code="",  # server ignores this for github_actions
+                    commit_hash=self._last_commit_hash,
+                )
+            except Exception as e:
+                self.notify(f"Submission failed: {e}", severity="error")
+                return
+            finally:
+                await client.close()
+
+            is_success = data.get("status") == "success"
+            message = data.get("message", "Unknown result")
+
+            async def _on_result_dismissed_ga() -> None:
+                await self.refresh_status()
+
+            self.app.push_screen(
+                SubmissionResultScreen(
+                    success=is_success,
+                    message=message,
+                    exercise_id=self.current_exercise,
+                ),
+                _on_result_dismissed_ga,
+            )
+            return
+
+        # ---------------------------------------------------------------
+        # All other exercise types: collect local files, run locally
+        # ---------------------------------------------------------------
         target_files = self._get_target_files(exercise_type)
         exercise_dir = settings.RENDU_DIR / self.current_exercise
 
@@ -446,16 +483,17 @@ class Dashboard(Screen):
         is_success = data.get("status") == "success"
         message = data.get("message", "Unknown result")
 
+        async def _on_result_dismissed() -> None:
+            await self.refresh_status()
+
         self.app.push_screen(
             SubmissionResultScreen(
                 success=is_success,
                 message=message,
                 exercise_id=self.current_exercise,
-            )
+            ),
+            _on_result_dismissed,
         )
-
-        if is_success:
-            await self.refresh_status()
 
     # -----------------------------------------------------------------------
     # File helpers (unchanged from original)

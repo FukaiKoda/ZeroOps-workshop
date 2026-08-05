@@ -115,6 +115,56 @@ async def verify_exercise_folder_exists(
     return exercise_id in dirs
 
 
+async def fetch_workflow_files(owner: str, repo: str, token: str) -> dict[str, str]:
+    """
+    Fetch all YAML files inside .github/workflows/ from the repository.
+    Returns a dict of { filename: file_content_string }.
+    Uses the GitHub Contents API (base64 encoded blobs).
+    """
+    import base64
+
+    result: dict[str, str] = {}
+    async with httpx.AsyncClient() as client:
+        # List the workflows directory
+        list_resp = await client.get(
+            f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/.github/workflows",
+            headers=_headers(token),
+            timeout=10.0,
+        )
+        if list_resp.status_code != 200:
+            return result  # directory doesn't exist or no access
+
+        items = list_resp.json()
+        if not isinstance(items, list):
+            return result
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name", "")
+            if not (name.endswith(".yml") or name.endswith(".yaml")):
+                continue
+            # Fetch file content
+            file_resp = await client.get(
+                item["url"],
+                headers=_headers(token),
+                timeout=10.0,
+            )
+            if file_resp.status_code != 200:
+                continue
+            file_data = file_resp.json()
+            encoding = file_data.get("encoding", "")
+            content_raw = file_data.get("content", "")
+            if encoding == "base64":
+                try:
+                    content = base64.b64decode(content_raw).decode("utf-8")
+                    result[name] = content
+                except Exception:
+                    pass
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Future extension point: create_repo_from_template
 # Implement here when a template repository is available.
