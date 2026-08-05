@@ -438,7 +438,7 @@ class Dashboard(Screen):
             is_success = data.get("status") == "success"
             message = data.get("message", "Unknown result")
 
-            async def _on_result_dismissed_ga() -> None:
+            async def _on_result_dismissed_ga(dismissed_result=None) -> None:
                 await self.refresh_status()
 
             self.app.push_screen(
@@ -483,7 +483,7 @@ class Dashboard(Screen):
         is_success = data.get("status") == "success"
         message = data.get("message", "Unknown result")
 
-        async def _on_result_dismissed() -> None:
+        async def _on_result_dismissed(dismissed_result=None) -> None:
             await self.refresh_status()
 
         self.app.push_screen(
