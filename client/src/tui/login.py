@@ -214,11 +214,9 @@ class LoginScreen(Screen):
         )
 
         if me.get("has_repository"):
-            from tui.dashboard import Dashboard
-            self.app.switch_screen(Dashboard())
+            self.app.switch_screen("dashboard")
         else:
-            from tui.onboarding import OnboardingScreen
-            self.app.switch_screen(OnboardingScreen())
+            self.app.switch_screen("onboarding")
 
     def _cancel_poll(self) -> None:
         if self._poll_timer:

@@ -173,8 +173,7 @@ class OnboardingScreen(Screen):
                 severity="success",
                 timeout=4,
             )
-            from tui.dashboard import Dashboard
-            self.app.switch_screen(Dashboard())
+            self.app.switch_screen("dashboard")
         else:
             message = result.get("message", "Failed to link repository.")
             self._set_status(f"⚠ {message}", error=True)

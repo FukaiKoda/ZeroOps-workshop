@@ -1,9 +1,14 @@
 import typer
+import shutil
 from textual.app import App
 from utils.signals import setup_signal_handlers
-from utils.config import settings
-from tui.screens import QuitScreen, LoginScreen
-import shutil
+from utils.config import settings, load_token, clear_token
+from api.client import ZeroOpsClient
+from tui.login import LoginScreen
+from tui.dashboard import Dashboard
+from tui.leaderboard import Leaderboard
+from tui.onboarding import OnboardingScreen
+from tui.modals import QuitScreen
 
 app = typer.Typer()
 
@@ -11,15 +16,44 @@ app = typer.Typer()
 class ZeroOpsApp(App):
     """A Textual app for ZeroOps."""
 
+    SCREENS = {
+        "login": LoginScreen,
+        "onboarding": OnboardingScreen,
+        "dashboard": Dashboard,
+        "leaderboard": Leaderboard,
+    }
+
     BINDINGS = [
         ("d", "toggle_dark", "Toggle dark mode"),
         ("q", "request_quit", "Quit"),
         ("ctrl+c", "request_quit", "Quit"),
     ]
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         setup_signal_handlers(self.notify)
-        self.push_screen(LoginScreen())
+
+        token = load_token()
+        if token:
+            client = ZeroOpsClient()
+            try:
+                me = await client.get_me()
+            except Exception:
+                me = {}
+            finally:
+                await client.close()
+
+            if "github_username" in me:
+                settings.USER_ID = me["github_username"]
+                if me.get("has_repository"):
+                    self.push_screen("dashboard")
+                    return
+                else:
+                    self.push_screen("onboarding")
+                    return
+            else:
+                clear_token()
+
+        self.push_screen("login")
 
     def action_toggle_dark(self) -> None:
         """An action to toggle dark mode."""
