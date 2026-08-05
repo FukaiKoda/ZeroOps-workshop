@@ -1,0 +1,7 @@
+{
+  "id": "ex00_github_actions_hello_workflow",
+  "title": "Hello Workflow",
+  "points": 10,
+  "requirements": [],
+  "type": "github_actions"
+}
