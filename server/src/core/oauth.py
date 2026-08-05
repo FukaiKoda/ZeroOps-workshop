@@ -5,6 +5,7 @@ Never stores or accepts Personal Access Tokens — OAuth tokens only.
 """
 
 import httpx
+from urllib.parse import urlencode
 from typing import Optional
 from .config import settings
 
@@ -21,12 +22,12 @@ def build_auth_url(state: str) -> str:
     Build the GitHub OAuth authorization URL.
     The user is redirected here in their browser to authorize the app.
     """
-    params = (
-        f"client_id={settings.GITHUB_CLIENT_ID}"
-        f"&redirect_uri=http://localhost:{settings.PORT}/v1/auth/callback"
-        f"&scope={OAUTH_SCOPES.replace(' ', '%20')}"
-        f"&state={state}"
-    )
+    params = urlencode({
+        "client_id": settings.GITHUB_CLIENT_ID,
+        "redirect_uri": f"http://localhost:{settings.PORT}/v1/auth/callback",
+        "scope": OAUTH_SCOPES,
+        "state": state,
+    })
     return f"{GITHUB_AUTHORIZE_URL}?{params}"
 
 

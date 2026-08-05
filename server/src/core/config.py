@@ -49,6 +49,8 @@ class Settings(BaseSettings):
 
     class Config:
         env_prefix = "ZEROOPS_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 
 def load_config() -> Settings:

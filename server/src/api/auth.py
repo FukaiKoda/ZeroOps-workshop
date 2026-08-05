@@ -61,6 +61,15 @@ async def initiate_login(request: Request):
     Returns a GitHub OAuth authorization URL and a state token.
     The client opens the URL in the system browser and polls /poll/{state}.
     """
+    if not settings.GITHUB_CLIENT_ID or not settings.GITHUB_CLIENT_SECRET:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "GitHub OAuth is not configured on the server. "
+                "Set ZEROOPS_GITHUB_CLIENT_ID and ZEROOPS_GITHUB_CLIENT_SECRET "
+                "in server/.env and restart the server."
+            ),
+        )
     state = create_state_token()
     auth_url = build_auth_url(state)
     return LoginInitResponse(auth_url=auth_url, state=state)
