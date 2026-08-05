@@ -8,10 +8,10 @@ from api.client import ZeroOpsClient
 class LeaderboardCard(Container):
     """A card for a single leaderboard entry."""
 
-    def __init__(self, rank: int, user_id: str, xp: int, level: int):
+    def __init__(self, rank: int, github_username: str, xp: int, level: int):
         super().__init__()
         self.rank = rank
-        self.user_id = user_id
+        self.github_username = github_username
         self.xp = xp
         self.level = level
 
@@ -41,7 +41,7 @@ class LeaderboardCard(Container):
 
         yield Center(Label("👤", classes="lb-avatar"))
 
-        yield Label(f"{self.user_id}", classes="lb-user")
+        yield Label(f"@{self.github_username}", classes="lb-user")
 
         yield Label(f"{self.xp} XP", classes="lb-xp")
         yield Label(f"Level {self.level}", classes="lb-level")
@@ -270,7 +270,7 @@ class Leaderboard(Screen):
             podium.mount(
                 LeaderboardCard(
                     rank=rank,
-                    user_id=entry.get("user_id"),
+                    github_username=entry.get("github_username", entry.get("user_id", "?")),
                     xp=entry.get("total_xp"),
                     level=entry.get("level"),
                 )
@@ -280,7 +280,7 @@ class Leaderboard(Screen):
             rest_list.mount(
                 LeaderboardCard(
                     rank=i,
-                    user_id=entry.get("user_id"),
+                    github_username=entry.get("github_username", entry.get("user_id", "?")),
                     xp=entry.get("total_xp"),
                     level=entry.get("level"),
                 )

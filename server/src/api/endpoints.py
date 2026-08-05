@@ -1,10 +1,20 @@
-from fastapi import APIRouter, Request
+"""
+Core exercise endpoints — status, exercise details, grading and leaderboard.
+User identity now comes from the JWT-authenticated User ORM object.
+"""
+
+from fastapi import APIRouter, Request, Depends
 from datetime import datetime
 from pydantic import BaseModel
 from typing import Optional
-from ..core.database import db
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+
+from ..core.db import get_db
+from ..core.database import exercise_db
 from ..core.rate_limit import limiter
-from ..models.user import ExerciseHistory
+from ..models.db_user import User
+from ..models.db_submission import ExerciseSubmission
 from ..models.exercise import ExerciseState, ExerciseType
 from ..models.submission import (
     SubmissionRequest,
@@ -12,18 +22,24 @@ from ..models.submission import (
     VerifyRequest,
     VerifyResponse,
 )
+from .auth import get_current_user
 
 router = APIRouter()
 
-PENDING_SUBMISSIONS = {}
+# In-memory nonce store — same pattern as original
+PENDING_SUBMISSIONS: dict[str, dict] = {}
 
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
 
 class StatusResponse(BaseModel):
     user_id: str
+    github_username: str
     current_level: int
     current_exercise: Optional[str] = None
     status: str = "ok"
-    unlock_at: Optional[datetime] = None
     server_time: datetime
 
 
@@ -34,68 +50,54 @@ class ExerciseDetailsResponse(BaseModel):
     type: ExerciseType = ExerciseType.DOCKER
 
 
+class SubmissionHistoryEntry(BaseModel):
+    exercise_id: str
+    status: str
+    score: int
+    feedback: Optional[str]
+    commit_hash: Optional[str]
+    submitted_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/status/{user_id}
+# For backwards compatibility, accepts github_username as user_id.
+# Protected: requires JWT.
+# ---------------------------------------------------------------------------
+
 @router.get("/status/{user_id}", response_model=StatusResponse)
 @limiter.limit("240/minute")
-async def get_status(request: Request, user_id: str):
+async def get_status(
+    request: Request,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
-    Returns the current status of the user.
-    If the user does not exist, a new profile is created (for workshop simplicity).
+    Returns the current status of the authenticated user.
+    `user_id` path param is kept for client compatibility but the identity
+    comes from the JWT — students cannot query other users' status.
     """
-    user = db.get_user(user_id)
-    if not user:
-        from ..models.user import UserProfile
-
-        user = UserProfile(user_id=user_id, current_level=0)
-        db.save_user(user)
-
-    current_exercise_id = None
-    level_dir = db.exercises_dir / f"level_{user.current_level:02d}"
-
-    server_time = datetime.now()
-
-    if level_dir.exists():
-        exercises = sorted(
-            [
-                item.name
-                for item in level_dir.iterdir()
-                if item.is_dir() and item.name.startswith("ex")
-            ]
-        )
-
-        for ex_id in exercises:
-            ex_status = user.progress.get(ex_id)
-            if ex_status != ExerciseState.SOLVED:
-                current_exercise_id = ex_id
-                break
-
-        if current_exercise_id is None and exercises:
-            next_level_dir = db.exercises_dir / f"level_{user.current_level + 1:02d}"
-            if next_level_dir.exists():
-                next_exercises = sorted(
-                    [
-                        item.name
-                        for item in next_level_dir.iterdir()
-                        if item.is_dir() and item.name.startswith("ex")
-                    ]
-                )
-                if next_exercises:
-                    current_exercise_id = next_exercises[0]
+    current_exercise_id = _find_current_exercise(current_user)
 
     return StatusResponse(
-        user_id=user.user_id,
-        current_level=user.current_level,
+        user_id=str(current_user.id),
+        github_username=current_user.github_username,
+        current_level=current_user.current_level,
         current_exercise=current_exercise_id,
-        server_time=server_time,
+        server_time=datetime.now(),
     )
 
+
+# ---------------------------------------------------------------------------
+# GET /v1/exercises/{exercise_id}
+# ---------------------------------------------------------------------------
 
 @router.get("/exercises/{exercise_id}", response_model=ExerciseDetailsResponse)
 @limiter.limit("240/minute")
 async def get_exercise(request: Request, exercise_id: str):
-    """
-    Returns the metadata and markdown subject for a specific exercise.
-    """
-    details = db.get_exercise_details(exercise_id)
+    """Returns the metadata and markdown subject for a specific exercise."""
+    details = exercise_db.get_exercise_details(exercise_id)
     if not details:
         return ExerciseDetailsResponse(
             id=exercise_id, points=0, subject="Exercise not found.", type="python"
@@ -110,27 +112,29 @@ async def get_exercise(request: Request, exercise_id: str):
     )
 
 
+# ---------------------------------------------------------------------------
+# POST /v1/grade
+# ---------------------------------------------------------------------------
+
 @router.post("/grade", response_model=SubmissionResponse)
 @limiter.limit("60/minute")
-async def submit_exercise(request: Request, submission: SubmissionRequest):
+async def submit_exercise(
+    request: Request,
+    submission: SubmissionRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Initiates the grading process.
-    Returns the grading script and a nonce for the client to execute.
+    Returns the grading script and a nonce for the client to execute locally.
     """
-    user = db.get_user(submission.user_id)
-    if not user:
-        return SubmissionResponse(
-            status="error", message="User not found", new_level=0, score=0
-        )
-
     import secrets
 
-    exercise_path = db.get_exercise_path(submission.exercise_id)
+    exercise_path = exercise_db.get_exercise_path(submission.exercise_id)
     if not exercise_path:
         return SubmissionResponse(
             status="error",
             message="Internal Error: Exercise path not found.",
-            new_level=user.current_level,
+            new_level=current_user.current_level,
             score=0,
         )
 
@@ -139,7 +143,7 @@ async def submit_exercise(request: Request, submission: SubmissionRequest):
         return SubmissionResponse(
             status="error",
             message="No grading logic found for this exercise.",
-            new_level=user.current_level,
+            new_level=current_user.current_level,
             score=0,
         )
 
@@ -149,34 +153,41 @@ async def submit_exercise(request: Request, submission: SubmissionRequest):
         return SubmissionResponse(
             status="error",
             message=f"Failed to read grader script: {e}",
-            new_level=user.current_level,
+            new_level=current_user.current_level,
             score=0,
         )
 
     nonce = secrets.token_hex(16)
-
     PENDING_SUBMISSIONS[nonce] = {
-        "user_id": submission.user_id,
+        "user_id": current_user.id,
         "exercise_id": submission.exercise_id,
+        "commit_hash": submission.commit_hash,
         "timestamp": datetime.now(),
     }
 
     return SubmissionResponse(
         status="pending",
         message="Grading script prepared. Please execute locally.",
-        new_level=user.current_level,
+        new_level=current_user.current_level,
         score=0,
         script_content=script_content,
         nonce=nonce,
     )
 
 
+# ---------------------------------------------------------------------------
+# POST /v1/verify
+# ---------------------------------------------------------------------------
+
 @router.post("/verify", response_model=VerifyResponse)
 @limiter.limit("60/minute")
-async def verify_submission(request: Request, verification: VerifyRequest):
-    """
-    Verifies the result of a client-side grading execution.
-    """
+async def verify_submission(
+    request: Request,
+    verification: VerifyRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Verifies the result of a client-side grading execution."""
     if verification.nonce not in PENDING_SUBMISSIONS:
         return VerifyResponse(
             status="error", message="Invalid or expired nonce.", new_level=0, score=0
@@ -184,73 +195,175 @@ async def verify_submission(request: Request, verification: VerifyRequest):
 
     submission_data = PENDING_SUBMISSIONS.pop(verification.nonce)
 
-    if submission_data["user_id"] != verification.user_id:
+    # Nonce must belong to the authenticated user
+    if submission_data["user_id"] != current_user.id:
         return VerifyResponse(
             status="error", message="User mismatch.", new_level=0, score=0
         )
 
-    user = db.get_user(verification.user_id)
-    if not user:
-        return VerifyResponse(
-            status="error", message="User not found.", new_level=0, score=0
-        )
-
     score = 0
-    status = ExerciseState.FAILED
+    status = "failed"
     message = "Failed"
 
     if verification.result:
         score = 100
-        status = ExerciseState.SOLVED
+        status = "passed"
         message = "Correct! " + verification.logs
     else:
         message = "Failed: " + verification.logs
 
-    entry = ExerciseHistory(
-        ex_id=submission_data["exercise_id"],
-        status=status,
-        score=score,
-        timestamp=datetime.now(),
+    # Determine commit hash — prefer what the verify request carries,
+    # fall back to what was stored at grade time
+    commit_hash = (
+        verification.commit_hash
+        or submission_data.get("commit_hash")
     )
 
-    updated_user = db.update_user_progress(user.user_id, entry)
+    # Persist submission record
+    submission_record = ExerciseSubmission(
+        user_id=current_user.id,
+        exercise_id=submission_data["exercise_id"],
+        status=status,
+        score=score,
+        feedback=verification.logs,
+        commit_hash=commit_hash,
+    )
+    db.add(submission_record)
+
+    # Update user XP and level progression
+    new_level = await _update_user_progress(
+        db, current_user, submission_data["exercise_id"], score
+    )
+
+    await db.commit()
 
     return VerifyResponse(
         status="success" if score == 100 else "failure",
         message=message,
-        new_level=updated_user.current_level if updated_user else user.current_level,
+        new_level=new_level,
         score=score,
     )
 
 
+# ---------------------------------------------------------------------------
+# GET /v1/leaderboard
+# ---------------------------------------------------------------------------
+
 class LeaderboardEntry(BaseModel):
     user_id: str
+    github_username: str
     level: int
     total_xp: int
 
 
 @router.get("/leaderboard", response_model=list[LeaderboardEntry])
 @limiter.limit("60/minute")
-async def get_leaderboard(request: Request):
-    users = db.get_all_users()
+async def get_leaderboard(request: Request, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(User).order_by(User.total_xp.desc(), User.current_level.desc())
+    )
+    users = result.scalars().all()
 
-    def sort_key(u):
-        last_solve_ts = datetime.max
-        for entry in reversed(u.history):
-            if entry.status == "solved":
-                last_solve_ts = entry.timestamp
-                break
-
-        return (-u.total_xp, -u.current_level, last_solve_ts)
-
-    users.sort(key=sort_key)
-
-    leaderboard = []
-    for u in users:
-        leaderboard.append(
-            LeaderboardEntry(
-                user_id=u.user_id, level=u.current_level, total_xp=u.total_xp
-            )
+    return [
+        LeaderboardEntry(
+            user_id=str(u.id),
+            github_username=u.github_username,
+            level=u.current_level,
+            total_xp=u.total_xp,
         )
+        for u in users
+    ]
 
-    return leaderboard
+
+# ---------------------------------------------------------------------------
+# GET /v1/submissions/{user_id}
+# ---------------------------------------------------------------------------
+
+@router.get("/submissions/{user_id}", response_model=list[SubmissionHistoryEntry])
+@limiter.limit("60/minute")
+async def get_submissions(
+    request: Request,
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns all submission history for the authenticated user."""
+    result = await db.execute(
+        select(ExerciseSubmission)
+        .where(ExerciseSubmission.user_id == current_user.id)
+        .order_by(ExerciseSubmission.submitted_at.desc())
+    )
+    submissions = result.scalars().all()
+
+    return [
+        SubmissionHistoryEntry(
+            exercise_id=s.exercise_id,
+            status=s.status,
+            score=s.score,
+            feedback=s.feedback,
+            commit_hash=s.commit_hash,
+            submitted_at=s.submitted_at,
+        )
+        for s in submissions
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+def _find_current_exercise(user: User) -> Optional[str]:
+    """
+    Find the first unsolved exercise for the user's current level.
+    Falls back to the first exercise of the next level if all are solved.
+    """
+    # Build a progress dict from submission history (latest status per exercise)
+    progress: dict[str, str] = {}
+    for sub in sorted(user.submissions, key=lambda s: s.submitted_at):
+        progress[sub.exercise_id] = sub.status
+
+    for level_offset in range(2):
+        level = user.current_level + level_offset
+        exercises = exercise_db.list_exercises_for_level(level)
+        for ex_id in exercises:
+            if progress.get(ex_id) != "passed":
+                return ex_id
+
+    return None
+
+
+async def _update_user_progress(
+    db: AsyncSession,
+    user: User,
+    exercise_id: str,
+    score: int,
+) -> int:
+    """
+    Update user's XP and check if they've completed the current level.
+    Returns the new level.
+    """
+    if score > 0:
+        # Award XP from exercise metadata
+        details = exercise_db.get_exercise_details(exercise_id)
+        if details:
+            user.total_xp += details["meta"].points
+
+        # Check if all exercises in the current level are now solved
+        exercises = exercise_db.list_exercises_for_level(user.current_level)
+        if exercises:
+            # Re-query submissions to get fresh state
+            result = await db.execute(
+                select(ExerciseSubmission)
+                .where(
+                    ExerciseSubmission.user_id == user.id,
+                    ExerciseSubmission.status == "passed",
+                )
+            )
+            solved = {s.exercise_id for s in result.scalars().all()}
+            solved.add(exercise_id)  # include current
+
+            if all(ex in solved for ex in exercises):
+                if exercise_db.level_exists(user.current_level + 1):
+                    user.current_level += 1
+
+    return user.current_level

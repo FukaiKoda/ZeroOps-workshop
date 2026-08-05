@@ -12,6 +12,7 @@ typer = "*"
 httpx = "^0.26.0"
 pydantic-settings = "^2.1.0"
 pyyaml = "^6.0.3"
+keyring = "^25.0.0"
 
 
 [build-system]

@@ -1,17 +1,30 @@
+"""
+Main dashboard screen.
+
+Displays:
+  - GitHub avatar (emoji placeholder in TUI) and username
+  - Linked repository name + last sync info
+  - Current exercise subject (Markdown)
+  - Exercise status: Not Started | In Progress | Passed | Failed
+  - Progress percentage
+  - Buttons: Submit, Sync Repository, Leaderboard, Quit
+"""
+
+import webbrowser
 from textual.app import ComposeResult
 from textual.containers import Container, ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import Button, Label, Header, Footer, Static, Markdown
+
 from api.client import ZeroOpsClient
 from utils.config import settings
-import webbrowser
 
 from .modals import QuitScreen, SubmissionResultScreen
 from .leaderboard import Leaderboard
 
 
 class Dashboard(Screen):
-    """Main dashboard showing user progress."""
+    """Main dashboard showing user progress, GitHub identity and repository state."""
 
     CSS = """
     Dashboard {
@@ -19,63 +32,113 @@ class Dashboard(Screen):
         width: 100%;
         height: 100%;
     }
-    
+
+    /* Top identity bar */
     #top-bar {
         height: auto;
         width: 100%;
         padding: 1 2;
+        layout: grid;
+        grid-size: 2;
+        grid-columns: 1fr 1fr;
+        margin-bottom: 0;
+        border-bottom: solid $primary;
+    }
+
+    .stat-col {
         layout: vertical;
-        margin-bottom: 1;
+        height: auto;
     }
 
-    #user-label, #status-label {
+    .stat {
+        color: $text-muted;
+        margin-bottom: 0;
+    }
+
+    .stat-value {
         text-style: bold;
+        margin-bottom: 0;
+    }
+
+    #username-label {
         color: $accent;
-        margin-bottom: 0;
-    }
-    
-    #exercise-label {
         text-style: bold;
+    }
+
+    #repo-label {
         color: $success;
+        text-style: bold;
+    }
+
+    #sync-info-label {
+        color: $text-muted;
+    }
+
+    #commit-label {
+        color: $text-muted;
+    }
+
+    /* Progress bar row */
+    #progress-bar {
+        height: 3;
+        width: 100%;
+        padding: 0 2;
+        layout: horizontal;
         margin-bottom: 0;
     }
 
-    #rendu-label {
-        text-style: bold;
-        color: $error;
-        margin-bottom: 0;
+    #progress-label {
+        width: 1fr;
+        content-align: left middle;
+        color: $primary;
     }
-    
+
+    #exercise-status-label {
+        width: auto;
+        content-align: right middle;
+        padding: 0 1;
+    }
+
+    /* Subject area */
     #subject {
         height: 1fr;
         width: 100%;
         border: solid $primary;
-        margin: 1 0;
+        margin: 0;
         padding: 1 2;
         min-height: 10;
     }
 
+    /* Action row */
     #actions {
         height: 5;
         align: center middle;
         layout: horizontal;
         padding-bottom: 1;
         width: 100%;
+        border-top: solid $primary;
     }
 
     #actions Button {
-        margin: 0 2;
-        min-width: 16;
+        margin: 0 1;
+        min-width: 18;
+    }
+
+    #sync-btn {
+        color: $success;
     }
 
     Markdown {
         padding: 1;
     }
-    
     """
 
+    def __init__(self):
+        super().__init__()
+        self.current_exercise: str | None = None
+        self._last_commit_hash: str | None = None
+
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
-        """Handle link clicks in markdown."""
         if event.href:
             self.notify(f"Opening {event.href}...", severity="information")
             webbrowser.open(event.href)
@@ -83,97 +146,200 @@ class Dashboard(Screen):
     def compose(self) -> ComposeResult:
         yield Header()
 
+        # Identity + repo card (2-column grid)
         yield Container(
-            Label(f"User: {settings.USER_ID}", id="user-label"),
-            Static("Level: ...", id="status-label", classes="stat"),
-            Static("Exercise: ...", id="exercise-label", classes="stat"),
-            Static("Rendu: ...", id="rendu-label", classes="stat"),
+            Container(
+                Static("👤 GitHub", classes="stat"),
+                Static("@...", id="username-label", classes="stat-value"),
+                Static("Level: ...", id="status-label", classes="stat-value"),
+                Static("XP: ...", id="xp-label", classes="stat"),
+                classes="stat-col",
+            ),
+            Container(
+                Static("📁 Repository", classes="stat"),
+                Static("—", id="repo-label", classes="stat-value"),
+                Static("Last sync: —", id="sync-info-label", classes="stat"),
+                Static("Commit: —", id="commit-label", classes="stat"),
+                classes="stat-col",
+            ),
             id="top-bar",
         )
 
-        yield ScrollableContainer(
-            Markdown("Loading subject...", id="subject-md"), id="subject"
+        # Progress row
+        yield Container(
+            Static("Exercise: loading...", id="progress-label"),
+            Static("", id="exercise-status-label"),
+            id="progress-bar",
         )
 
+        # Exercise subject
+        yield ScrollableContainer(
+            Markdown("Loading...", id="subject-md"), id="subject"
+        )
+
+        # Actions
         yield Container(
             Button("Submit", variant="primary", id="submit"),
+            Button("🔄 Sync Repository", variant="default", id="sync-btn"),
             Button("Leaderboard", variant="primary", id="leaderboard"),
-            Button("Quit", variant="primary", id="quit"),
+            Button("Quit", variant="error", id="quit"),
             id="actions",
         )
 
         yield Footer()
 
     async def on_mount(self) -> None:
-        """Load status when screen mounts."""
         await self.refresh_status()
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "quit":
-            self.app.push_screen(QuitScreen())
-        elif event.button.id == "submit":
-            await self.submit_exercise()
-        elif event.button.id == "leaderboard":
-            self.app.push_screen(Leaderboard())
+        match event.button.id:
+            case "quit":
+                self.app.push_screen(QuitScreen())
+            case "submit":
+                await self.submit_exercise()
+            case "sync-btn":
+                await self.sync_repository()
+            case "leaderboard":
+                self.app.push_screen(Leaderboard())
 
-    async def refresh_status(self):
+    # -----------------------------------------------------------------------
+    # Status refresh
+    # -----------------------------------------------------------------------
+
+    async def refresh_status(self) -> None:
+        """Fetch profile + status + exercise details and update all widgets."""
         client = ZeroOpsClient()
         try:
+            # Fetch GitHub profile and repo info
+            me = await client.get_me()
+            if "github_username" not in me:
+                self._show_error("Session expired. Please restart and log in again.")
+                await client.close()
+                return
+
+            settings.USER_ID = me["github_username"]
+            self._update_identity(me)
+
+            # Fetch exercise status
             data = await client.get_status()
         except Exception as e:
             self.notify(f"Connection error: {e}", severity="error")
-            data = {"status": "error", "message": "Failed to connect to server."}
+            await client.close()
+            return
         finally:
             await client.close()
 
         if data.get("status") == "ok":
-            self.query_one("#subject").styles.display = "block"
-            self.query_one("#submit").disabled = False
-
-            self.query_one("#status-label", Static).update(
-                f"Level: {data.get('current_level')}"
-            )
+            level = data.get("current_level", 0)
             ex_id = data.get("current_exercise")
-            self.query_one("#exercise-label", Static).update(
-                f"Exercise: {ex_id or 'None'}"
-            )
-            self.query_one("#rendu-label", Static).update(
-                f"Rendu: ~/rendudevops/{ex_id or '...'}"
-            )
+
+            self.query_one("#status-label", Static).update(f"Level: {level}")
             self.current_exercise = ex_id
 
             if ex_id:
-                client = ZeroOpsClient()
-                try:
-                    details = await client.get_exercise_details(ex_id)
-                except Exception as e:
-                    self.notify(
-                        f"Failed to load exercise details: {e}", severity="error"
-                    )
-                    details = {}
-                finally:
-                    await client.close()
-
-                self.query_one("#subject-md", Markdown).update(
-                    details.get("subject", "No subject.")
+                self.query_one("#progress-label", Static).update(
+                    f"Exercise: {ex_id}  •  Workspace: ~/rendudevops/{ex_id}"
                 )
-
                 self._ensure_workspace_ready(ex_id)
+                await self._load_exercise_subject(ex_id)
+                await self._update_exercise_status(ex_id)
             else:
-                self.query_one("#subject-md", Markdown).update("No active exercise.")
+                self.query_one("#progress-label", Static).update(
+                    "🎉 All exercises complete!"
+                )
+                self.query_one("#subject-md", Markdown).update(
+                    "**Congratulations!** You have completed all exercises."
+                )
         else:
-            self.query_one("#status-label", Static).update(
-                f"Error: {data.get('message', 'Unknown')}"
+            self._show_error(data.get("message", "Unknown error"))
+
+    def _update_identity(self, me: dict) -> None:
+        """Update GitHub identity and repo widgets from profile data."""
+        username = me.get("github_username", "—")
+        avatar = me.get("github_avatar", "")  # URL, not displayable in TUI
+        level = me.get("current_level", 0)
+        xp = me.get("total_xp", 0)
+
+        self.query_one("#username-label", Static).update(f"@{username}")
+        self.query_one("#status-label", Static).update(f"Level: {level}")
+        self.query_one("#xp-label", Static).update(f"XP: {xp}")
+
+        repo = me.get("repository")
+        if repo:
+            full_name = repo.get("full_name", "—")
+            last_commit = repo.get("last_commit_hash")
+            last_sync = repo.get("last_synced_at")
+
+            self.query_one("#repo-label", Static).update(f"📁 {full_name}")
+
+            if last_sync:
+                # Show a compact timestamp
+                sync_str = last_sync[:19].replace("T", " ") if last_sync else "Never"
+                self.query_one("#sync-info-label", Static).update(
+                    f"Last sync: {sync_str}"
+                )
+            else:
+                self.query_one("#sync-info-label", Static).update("Last sync: Never")
+
+            if last_commit:
+                self._last_commit_hash = last_commit
+                short = last_commit[:7]
+                self.query_one("#commit-label", Static).update(f"Commit: {short}")
+            else:
+                self.query_one("#commit-label", Static).update("Commit: —")
+        else:
+            self.query_one("#repo-label", Static).update("No repository linked")
+            self.query_one("#sync-info-label", Static).update("")
+            self.query_one("#commit-label", Static).update("")
+
+    async def _load_exercise_subject(self, ex_id: str) -> None:
+        """Fetch and render the exercise markdown subject."""
+        client = ZeroOpsClient()
+        try:
+            details = await client.get_exercise_details(ex_id)
+            self.query_one("#subject-md", Markdown).update(
+                details.get("subject", "No subject available.")
             )
+        except Exception as e:
+            self.notify(f"Failed to load exercise details: {e}", severity="error")
+        finally:
+            await client.close()
+
+    async def _update_exercise_status(self, ex_id: str) -> None:
+        """Fetch submission history and set the status badge for the current exercise."""
+        client = ZeroOpsClient()
+        try:
+            submissions = await client.get_submissions()
+        except Exception:
+            submissions = []
+        finally:
+            await client.close()
+
+        status_label = self.query_one("#exercise-status-label", Static)
+
+        # Find the most recent submission for this exercise
+        exercise_subs = [s for s in submissions if s.get("exercise_id") == ex_id]
+        if not exercise_subs:
+            status_label.update("◦ Not Started")
+            status_label.styles.color = "gray"
+        else:
+            latest = exercise_subs[0]  # Already sorted desc by submitted_at
+            status = latest.get("status", "")
+            if status == "passed":
+                status_label.update("✅ Passed")
+                status_label.styles.color = "green"
+            elif status == "failed":
+                status_label.update("❌ Failed")
+                status_label.styles.color = "red"
+            else:
+                status_label.update("◷ In Progress")
+                status_label.styles.color = "yellow"
 
     def _ensure_workspace_ready(self, ex_id: str) -> None:
         """Ensure local workspace directories exist."""
         if not settings.RENDU_DIR.exists():
             try:
                 settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
-                self.notify(
-                    f"Created workspace at {settings.RENDU_DIR}", severity="information"
-                )
             except Exception as e:
                 self.notify(f"Could not create workspace: {e}", severity="error")
 
@@ -185,10 +351,119 @@ class Dashboard(Screen):
             except Exception as e:
                 self.notify(f"Could not create exercise dir: {e}", severity="error")
 
+    def _show_error(self, message: str) -> None:
+        try:
+            self.query_one("#progress-label", Static).update(f"⚠ {message}")
+        except Exception:
+            self.notify(message, severity="error")
+
+    # -----------------------------------------------------------------------
+    # Sync
+    # -----------------------------------------------------------------------
+
+    async def sync_repository(self) -> None:
+        """Trigger a repository sync and refresh the dashboard."""
+        sync_btn = self.query_one("#sync-btn", Button)
+        sync_btn.disabled = True
+        self.notify("Syncing repository...", severity="information")
+
+        client = ZeroOpsClient()
+        try:
+            result = await client.sync_repo()
+        except Exception as e:
+            result = {"status": "error", "message": str(e)}
+        finally:
+            await client.close()
+            sync_btn.disabled = False
+
+        status = result.get("status")
+        if status == "synced":
+            commit = result.get("commit_hash", "")
+            short = commit[:7] if commit else "—"
+            folders = result.get("exercise_folders", [])
+            self._last_commit_hash = commit or self._last_commit_hash
+            self.notify(
+                f"Synced! Latest commit: {short}  •  {len(folders)} folder(s) found",
+                severity="success",
+                timeout=5,
+            )
+            # Refresh to show updated sync info
+            await self.refresh_status()
+        else:
+            message = result.get("message", "Sync failed.")
+            self.notify(f"Sync failed: {message}", severity="error")
+
+    # -----------------------------------------------------------------------
+    # Submit
+    # -----------------------------------------------------------------------
+
+    async def submit_exercise(self) -> None:
+        if not self.current_exercise:
+            self.notify("No active exercise to submit!", severity="warning")
+            return
+
+        self.notify(f"Submitting {self.current_exercise}...", severity="information")
+
+        # Fetch exercise type to determine which files to collect
+        client = ZeroOpsClient()
+        details = {}
+        try:
+            details = await client.get_exercise_details(self.current_exercise)
+        except Exception as e:
+            self.notify(f"Failed to get exercise details: {e}", severity="error")
+            await client.close()
+            return
+        finally:
+            await client.close()
+
+        exercise_type = details.get("type", "python")
+        target_files = self._get_target_files(exercise_type)
+        exercise_dir = settings.RENDU_DIR / self.current_exercise
+
+        code_to_submit, files_found = self._collect_exercise_code(
+            exercise_dir, target_files, exercise_type
+        )
+
+        if target_files and not files_found:
+            expected = ", ".join(target_files)
+            self.notify(f"No files found. Expected: {expected}", severity="error")
+            return
+
+        client = ZeroOpsClient()
+        try:
+            data = await client.submit_exercise(
+                self.current_exercise,
+                code=code_to_submit,
+                commit_hash=self._last_commit_hash,
+            )
+        except Exception as e:
+            self.notify(f"Submission failed: {e}", severity="error")
+            await client.close()
+            return
+        finally:
+            await client.close()
+
+        is_success = data.get("status") == "success"
+        message = data.get("message", "Unknown result")
+
+        self.app.push_screen(
+            SubmissionResultScreen(
+                success=is_success,
+                message=message,
+                exercise_id=self.current_exercise,
+            )
+        )
+
+        if is_success:
+            await self.refresh_status()
+
+    # -----------------------------------------------------------------------
+    # File helpers (unchanged from original)
+    # -----------------------------------------------------------------------
+
     def _collect_exercise_code(
         self, exercise_dir, target_files, exercise_type
     ) -> tuple[str, list]:
-        """Read and concatenate all relevant exercise files."""
         code_parts = []
         files_found = []
 
@@ -219,77 +494,14 @@ class Dashboard(Screen):
 
         return "\n---\n".join(code_parts), files_found
 
-    async def submit_exercise(self):
-        if not hasattr(self, "current_exercise") or not self.current_exercise:
-            self.notify("No active exercise to submit!", severity="warning")
-            return
-
-        self.notify(f"Submitting {self.current_exercise}...", severity="information")
-
-        client = ZeroOpsClient()
-        details = {}
-        try:
-            details = await client.get_exercise_details(self.current_exercise)
-        except Exception as e:
-            self.notify(f"Failed to get exercise details: {e}", severity="error")
-            return
-        finally:
-            await client.close()
-
-        exercise_type = details.get("type", "python")
-
-        target_files = self._get_target_files(exercise_type)
-
-        exercise_dir = settings.RENDU_DIR / self.current_exercise
-
-        code_to_submit, files_found = self._collect_exercise_code(
-            exercise_dir, target_files, exercise_type
-        )
-
-        if target_files and not files_found:
-            expected = ", ".join(target_files)
-            self.notify(f"No files found. Expected: {expected}", severity="error")
-            return
-
-        client = ZeroOpsClient()
-        try:
-            data = await client.submit_exercise(
-                self.current_exercise, code=code_to_submit
-            )
-        except Exception as e:
-            self.notify(f"Submission failed: {e}", severity="error")
-            return
-        finally:
-            await client.close()
-
-        is_success = data.get("status") == "success"
-        message = data.get("message", "Unknown result")
-
-        self.app.push_screen(
-            SubmissionResultScreen(
-                success=is_success, message=message, exercise_id=self.current_exercise
-            )
-        )
-
-        if is_success:
-            await self.refresh_status()
-
     def _get_target_files(self, exercise_type: str) -> list:
-        """Return list of expected files based on exercise type."""
         file_mapping = {
             "python": ["main.py"],
             "docker": ["Dockerfile"],
             "kubernetes": [
-                "deployment.yaml",
-                "service.yaml",
-                "pod.yaml",
-                "configmap.yaml",
-                "secret.yaml",
-                "ingress.yaml",
-                "pv.yaml",
-                "pvc.yaml",
-                "namespace.yaml",
-                "replicaset.yaml",
+                "deployment.yaml", "service.yaml", "pod.yaml",
+                "configmap.yaml", "secret.yaml", "ingress.yaml",
+                "pv.yaml", "pvc.yaml", "namespace.yaml", "replicaset.yaml",
             ],
             "docker-compose": ["docker-compose.yaml", "docker-compose.yml"],
             "prometheus": ["prometheus.yml", "prometheus.yaml", "alerting-rules.yml"],

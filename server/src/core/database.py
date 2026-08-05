@@ -1,36 +1,24 @@
-import json
+"""
+Exercise content database — flat-file JSON (unchanged from original).
+Only serves exercise metadata and scripts from the data/exercises directory.
+User management has been moved to SQLite via SQLAlchemy (see core/db.py).
+"""
+
 import os
 from typing import Optional
 from pathlib import Path
-from ..models.user import UserProfile, ExerciseHistory
-from ..models.exercise import ExerciseMetadata, ExerciseState
+from ..models.exercise import ExerciseMetadata
 
 
-class JSONDatabase:
-    def __init__(self, data_dir: str = "data"):
-        self.data_dir = Path(data_dir)
-        self.users_dir = self.data_dir / "users"
-        self.exercises_dir = self.data_dir / "exercises"
-        self.users_dir.mkdir(parents=True, exist_ok=True)
+class ExerciseDatabase:
+    """
+    Read-only access to exercise content stored as flat files.
+    Structure: data/exercises/level_XX/ex_id/{meta.json, subject.md, check.py}
+    """
+
+    def __init__(self, exercises_dir: str = "data/exercises"):
+        self.exercises_dir = Path(exercises_dir)
         self.exercises_dir.mkdir(parents=True, exist_ok=True)
-
-    def get_user(self, user_id: str) -> Optional[UserProfile]:
-        user_file = self.users_dir / f"{user_id}.json"
-        if not user_file.exists():
-            return None
-
-        try:
-            with open(user_file, "r") as f:
-                data = json.load(f)
-            return UserProfile(**data)
-        except Exception as e:
-            print(f"Error loading user {user_id}: {e}")
-            return None
-
-    def save_user(self, user: UserProfile):
-        user_file = self.users_dir / f"{user.user_id}.json"
-        with open(user_file, "w") as f:
-            f.write(user.model_dump_json(indent=2))
 
     def get_exercise_meta(self, level: int, ex_id: str) -> Optional[ExerciseMetadata]:
         level_dir = self.exercises_dir / f"level_{level:02d}"
@@ -40,6 +28,7 @@ class JSONDatabase:
             return None
 
         try:
+            import json
             with open(meta_file, "r") as f:
                 data = json.load(f)
             return ExerciseMetadata(**data)
@@ -54,6 +43,7 @@ class JSONDatabase:
 
             exercise_path = level_dir / ex_id
             if exercise_path.exists():
+                import json
                 meta = self.get_exercise_meta(int(level_dir.name.split("_")[1]), ex_id)
                 if not meta:
                     return None
@@ -72,72 +62,27 @@ class JSONDatabase:
         for level_dir in sorted(self.exercises_dir.iterdir()):
             if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
                 continue
-
             exercise_path = level_dir / ex_id
             if exercise_path.exists():
                 return exercise_path
         return None
 
-    def update_user_progress(
-        self, user_id: str, history_entry: ExerciseHistory
-    ) -> Optional[UserProfile]:
-        user = self.get_user(user_id)
-        if not user:
-            return None
+    def list_exercises_for_level(self, level: int) -> list[str]:
+        """Return sorted list of exercise IDs for a given level."""
+        level_dir = self.exercises_dir / f"level_{level:02d}"
+        if not level_dir.exists():
+            return []
+        return sorted(
+            item.name
+            for item in level_dir.iterdir()
+            if item.is_dir() and item.name.startswith("ex")
+        )
 
-        user.history.append(history_entry)
-
-        user.progress[history_entry.ex_id] = history_entry.status
-
-        if history_entry.status == ExerciseState.SOLVED:
-            found_meta = None
-
-            for level_dir in self.exercises_dir.iterdir():
-                if level_dir.is_dir() and level_dir.name.startswith("level_"):
-                    potential_path = level_dir / history_entry.ex_id / "meta.json"
-                    if potential_path.exists():
-                        try:
-                            with open(potential_path, "r") as f:
-                                found_meta = ExerciseMetadata(**json.load(f))
-                            int(level_dir.name.split("_")[1])
-                            break
-                        except Exception:
-                            pass
-
-            if found_meta:
-                user.total_xp += found_meta.points
-
-            current_level_dir = self.exercises_dir / f"level_{user.current_level:02d}"
-            if current_level_dir.exists():
-                all_exercises = [
-                    item.name
-                    for item in current_level_dir.iterdir()
-                    if item.is_dir() and item.name.startswith("ex")
-                ]
-
-                all_solved = True
-                for ex_id in all_exercises:
-                    if user.progress.get(ex_id) != ExerciseState.SOLVED:
-                        all_solved = False
-                        break
-
-                if all_solved and all_exercises:
-                    user.current_level += 1
-
-        self.save_user(user)
-        return user
-
-    def get_all_users(self) -> list[UserProfile]:
-        users = []
-        for user_file in self.users_dir.glob("*.json"):
-            try:
-                with open(user_file, "r") as f:
-                    data = json.load(f)
-                users.append(UserProfile(**data))
-            except Exception as e:
-                print(f"Error loading user {user_file}: {e}")
-        return users
+    def level_exists(self, level: int) -> bool:
+        return (self.exercises_dir / f"level_{level:02d}").exists()
 
 
-DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent.parent / "data"
-db = JSONDatabase(os.getenv("DATA_DIR", str(DEFAULT_DATA_DIR)))
+DEFAULT_EXERCISES_DIR = Path(__file__).parent.parent.parent.parent / "data" / "exercises"
+exercise_db = ExerciseDatabase(
+    os.getenv("EXERCISES_DIR", str(DEFAULT_EXERCISES_DIR))
+)
