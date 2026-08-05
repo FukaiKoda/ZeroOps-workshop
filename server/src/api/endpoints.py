@@ -368,7 +368,7 @@ async def _grade_github_actions(
             score=0,
         )
 
-    if not current_user.github_access_token:
+    if not current_user.access_token:
         return SubmissionResponse(
             status="error",
             message="No GitHub token found. Please log out and log in again.",
@@ -380,7 +380,7 @@ async def _grade_github_actions(
     workflow_files = await fetch_workflow_files(
         owner=repo.owner,
         repo=repo.repo,
-        token=current_user.github_access_token,
+        token=current_user.access_token,
     )
 
     if not workflow_files:
