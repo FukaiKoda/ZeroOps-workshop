@@ -1,0 +1,9 @@
+{
+  "id": "ex05_workflow_triggers",
+  "folder": "ex05_workflow_triggers",
+  "version": 1,
+  "title": "Workflow Triggers",
+  "points": 20,
+  "requirements": ["ex04_job_dependencies"],
+  "type": "github_actions"
+}

@@ -1,0 +1,9 @@
+{
+  "id": "ex07_marketplace_actions",
+  "folder": "ex07_marketplace_actions",
+  "version": 1,
+  "title": "Marketplace Actions",
+  "points": 30,
+  "requirements": ["ex06_the_broken_pipeline"],
+  "type": "github_actions"
+}

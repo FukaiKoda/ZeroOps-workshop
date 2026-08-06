@@ -1,0 +1,9 @@
+{
+  "id": "ex06_the_broken_pipeline",
+  "folder": "ex06_the_broken_pipeline",
+  "version": 1,
+  "title": "The Broken Pipeline",
+  "points": 40,
+  "requirements": ["ex05_workflow_triggers"],
+  "type": "github_actions"
+}

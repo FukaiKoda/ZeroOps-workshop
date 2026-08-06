@@ -1,0 +1,9 @@
+{
+  "id": "ex03_multi_job_pipeline",
+  "folder": "ex03_multi_job_pipeline",
+  "version": 1,
+  "title": "Multi-Job Pipeline",
+  "points": 30,
+  "requirements": ["ex02_multi_step_workflow"],
+  "type": "github_actions"
+}
