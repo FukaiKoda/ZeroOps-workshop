@@ -13,7 +13,7 @@ from sqlalchemy import select, func
 from ..core.db import get_db
 from ..core.database import exercise_db
 from ..core.rate_limit import limiter
-from ..core.github_repo import fetch_workflow_files
+from ..core.github_repo import fetch_workflow_files, fetch_directory
 from ..models.db_user import User
 from ..models.db_submission import ExerciseSubmission
 from ..models.exercise import ExerciseState, ExerciseType
@@ -46,9 +46,12 @@ class StatusResponse(BaseModel):
 
 class ExerciseDetailsResponse(BaseModel):
     id: str
+    folder: str = ""
+    version: int = 1
     points: int
     subject: str
     type: ExerciseType = ExerciseType.DOCKER
+
 
 
 class SubmissionHistoryEntry(BaseModel):
@@ -101,12 +104,16 @@ async def get_exercise(request: Request, exercise_id: str):
     details = exercise_db.get_exercise_details(exercise_id)
     if not details:
         return ExerciseDetailsResponse(
-            id=exercise_id, points=0, subject="Exercise not found.", type="python"
+            id=exercise_id, folder=exercise_id, version=1, points=0, subject="Exercise not found.", type="python"
         )
 
     meta = details["meta"]
+    folder_name = getattr(meta, "folder", None) or (meta.get_folder_name() if hasattr(meta, "get_folder_name") else meta.id)
+    version_num = getattr(meta, "version", 1)
     return ExerciseDetailsResponse(
         id=meta.id,
+        folder=folder_name,
+        version=version_num,
         points=meta.points,
         subject=details["subject"],
         type=getattr(meta, "type", "python"),
@@ -127,10 +134,9 @@ async def submit_exercise(
 ):
     """
     Initiates the grading process.
-    - For github_actions exercises: grades server-side by fetching workflow
-      files directly from the student's linked GitHub repository.
-    - For all other exercises: returns the grading script + nonce for
-      the client to execute locally.
+    - If user has a linked repository: grades server-side by fetching the exercise
+      folder from the student's repository and running check.py in a temp workspace.
+    - For unlinked repositories / local exercises: returns script content + nonce for local execution.
     """
     import secrets
 
@@ -152,15 +158,12 @@ async def submit_exercise(
             score=0,
         )
 
-    # -----------------------------------------------------------------
-    # GitHub Actions exercises: server fetches workflow files and grades
-    # directly — no local files needed from the student.
-    # -----------------------------------------------------------------
     details = exercise_db.get_exercise_details(submission.exercise_id)
     exercise_type = getattr(details["meta"], "type", None) if details else None
 
-    if exercise_type == ExerciseType.GITHUB_ACTIONS:
-        return await _grade_github_actions(
+    # Server-side repository folder-scoped grading flow
+    if current_user.repository or exercise_type == ExerciseType.GITHUB_ACTIONS:
+        return await grade_submission(
             db=db,
             current_user=current_user,
             exercise_path=exercise_path,
@@ -169,6 +172,7 @@ async def submit_exercise(
             commit_hash=submission.commit_hash,
             details=details,
         )
+
 
     # -----------------------------------------------------------------
     # All other exercise types: client-side grading flow
@@ -335,10 +339,10 @@ async def get_submissions(
 
 
 # ---------------------------------------------------------------------------
-# GitHub Actions server-side grader
+# Generic Server-Side Grader (Folder-Scoped & Isolated Workspace Lifecycle)
 # ---------------------------------------------------------------------------
 
-async def _grade_github_actions(
+async def grade_submission(
     db: AsyncSession,
     current_user: User,
     exercise_path,
@@ -348,10 +352,13 @@ async def _grade_github_actions(
     details: dict,
 ) -> SubmissionResponse:
     """
-    Grade a GitHub Actions exercise fully server-side:
-    1. Fetch .github/workflows/ files from the student's linked repo via GitHub API.
-    2. Concatenate them and pass to check.py's grade() function.
-    3. Persist the result and update XP/level.
+    Grade an exercise using the isolated workspace lifecycle:
+    1. Determine exercise target folder (e.g. 'ex00_hello_workflow') from metadata.
+    2. Fetch files strictly from student's repository directory ('folder/').
+    3. Write files into a clean temporary workspace (/tmp/zeroops-grade-XXXX/).
+    4. Execute check.py's grade(code, exercise_path=tmp_dir) with exercise_path set to the isolated temp directory.
+    5. Cleanly delete the temporary directory post-execution.
+    6. Persist submission outcome independently for exercise_id.
     """
     import sys
     import tempfile
@@ -376,43 +383,60 @@ async def _grade_github_actions(
             score=0,
         )
 
-    # Fetch workflow files from GitHub
-    workflow_files = await fetch_workflow_files(
+    meta = details.get("meta") if details else None
+    if meta and hasattr(meta, "get_folder_name"):
+        folder_name = meta.get_folder_name()
+    elif meta and getattr(meta, "folder", None):
+        folder_name = meta.folder
+    else:
+        folder_name = exercise_id
+
+    # Fetch files strictly inside the exercise folder from student's GitHub repo
+    exercise_files = await fetch_directory(
         owner=repo.owner,
         repo=repo.repo,
+        directory_path=folder_name,
         token=current_user.access_token,
     )
 
-    if not workflow_files:
+    if not exercise_files:
         return SubmissionResponse(
             status="failure",
             message=(
-                "No workflow files found in your repository at .github/workflows/.\n"
-                "Create a workflow YAML file, commit it, and push to GitHub, then try again."
+                f"Directory '{folder_name}' not found in your repository '{repo.full_name}'.\n"
+                f"Please create the folder '{folder_name}/' in your repository, add your solution files, commit, push, and submit again."
             ),
             new_level=current_user.current_level,
             score=0,
         )
 
-    # Concatenate all workflow file contents for the grader
-    combined_code = "\n---\n".join(
-        f"# === {name} ===\n{content}"
-        for name, content in workflow_files.items()
-    )
+    # Create temporary isolated workspace (guaranteed cleanup)
+    with tempfile.TemporaryDirectory(prefix="zeroops-grade-") as tmp_dir_str:
+        tmp_workspace = _Path(tmp_dir_str)
 
-    # Dynamically load check.py and run grade()
-    try:
-        spec = importlib.util.spec_from_file_location("check_module", check_script_path)
-        check_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(check_module)
-        success, feedback = check_module.grade(combined_code, exercise_path)
-    except Exception as e:
-        return SubmissionResponse(
-            status="error",
-            message=f"Grader error: {e}",
-            new_level=current_user.current_level,
-            score=0,
-        )
+        # Write fetched exercise files into the isolated temp workspace
+        combined_code_lines = []
+        for rel_path, content in exercise_files.items():
+            target_file = tmp_workspace / rel_path
+            target_file.parent.mkdir(parents=True, exist_ok=True)
+            target_file.write_text(content)
+            combined_code_lines.append(f"# === {rel_path} ===\n{content}")
+
+        combined_code = "\n---\n".join(combined_code_lines)
+
+        # Dynamically load check.py and execute grade(code, exercise_path=tmp_workspace)
+        try:
+            spec = importlib.util.spec_from_file_location("check_module", check_script_path)
+            check_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(check_module)
+            success, feedback = check_module.grade(combined_code, tmp_workspace)
+        except Exception as e:
+            return SubmissionResponse(
+                status="error",
+                message=f"Grader error: {e}",
+                new_level=current_user.current_level,
+                score=0,
+            )
 
     score = 100 if success else 0
     status = "passed" if success else "failed"
@@ -437,6 +461,7 @@ async def _grade_github_actions(
         new_level=new_level,
         score=score,
     )
+
 
 
 # ---------------------------------------------------------------------------

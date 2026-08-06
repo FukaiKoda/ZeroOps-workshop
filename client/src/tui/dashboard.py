@@ -237,11 +237,12 @@ class Dashboard(Screen):
             self.current_exercise = ex_id
 
             if ex_id:
+                folder_name = await self._load_exercise_subject(ex_id)
+                folder_disp = folder_name or ex_id
                 self.query_one("#progress-label", Static).update(
-                    f"Exercise: {ex_id}  •  Workspace: ~/rendudevops/{ex_id}"
+                    f"Exercise: {ex_id}  •  Target Folder: {folder_disp}/"
                 )
-                self._ensure_workspace_ready(ex_id)
-                await self._load_exercise_subject(ex_id)
+                self._ensure_workspace_ready(folder_disp)
                 await self._update_exercise_status(ex_id)
             else:
                 self.query_one("#progress-label", Static).update(
@@ -292,18 +293,21 @@ class Dashboard(Screen):
             self.query_one("#sync-info-label", Static).update("")
             self.query_one("#commit-label", Static).update("")
 
-    async def _load_exercise_subject(self, ex_id: str) -> None:
-        """Fetch and render the exercise markdown subject."""
+    async def _load_exercise_subject(self, ex_id: str) -> str:
+        """Fetch and render the exercise markdown subject. Returns the folder name."""
         client = ZeroOpsClient()
+        folder_name = ex_id
         try:
             details = await client.get_exercise_details(ex_id)
-            self.query_one("#subject-md", Markdown).update(
-                details.get("subject", "No subject available.")
-            )
+            folder_name = details.get("folder") or ex_id
+            subject_md = details.get("subject", "No subject available.")
+            header_prefix = f"> **Target Directory in Portfolio Repository:** `{folder_name}/`\n\n---\n\n"
+            self.query_one("#subject-md", Markdown).update(header_prefix + subject_md)
         except Exception as e:
             self.notify(f"Failed to load exercise details: {e}", severity="error")
         finally:
             await client.close()
+        return folder_name
 
     async def _update_exercise_status(self, ex_id: str) -> None:
         """Fetch submission history and set the status badge for the current exercise."""
@@ -320,8 +324,8 @@ class Dashboard(Screen):
         # Find the most recent submission for this exercise
         exercise_subs = [s for s in submissions if s.get("exercise_id") == ex_id]
         if not exercise_subs:
-            status_label.update("◦ Not Started")
-            status_label.styles.color = "gray"
+            status_label.update("🟡 In Progress")
+            status_label.styles.color = "yellow"
         else:
             latest = exercise_subs[0]  # Already sorted desc by submitted_at
             status = latest.get("status", "")
@@ -332,24 +336,25 @@ class Dashboard(Screen):
                 status_label.update("❌ Failed")
                 status_label.styles.color = "red"
             else:
-                status_label.update("◷ In Progress")
+                status_label.update("🟡 In Progress")
                 status_label.styles.color = "yellow"
 
-    def _ensure_workspace_ready(self, ex_id: str) -> None:
-        """Ensure local workspace directories exist."""
+    def _ensure_workspace_ready(self, folder_name: str) -> None:
+        """Ensure local workspace directory exists for exercise folder."""
         if not settings.RENDU_DIR.exists():
             try:
                 settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
             except Exception as e:
                 self.notify(f"Could not create workspace: {e}", severity="error")
 
-        ex_dir = settings.RENDU_DIR / ex_id
+        ex_dir = settings.RENDU_DIR / folder_name
         if not ex_dir.exists():
             try:
                 ex_dir.mkdir(exist_ok=True)
-                self.notify(f"Created directory for {ex_id}", severity="information")
+                self.notify(f"Created directory for {folder_name}", severity="information")
             except Exception as e:
                 self.notify(f"Could not create exercise dir: {e}", severity="error")
+
 
     def _show_error(self, message: str) -> None:
         try:

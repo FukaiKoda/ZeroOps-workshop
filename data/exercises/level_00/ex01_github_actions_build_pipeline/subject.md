@@ -1,4 +1,4 @@
-# Exercise 00 — Build Pipeline ⭐⭐
+# Exercise 01 — Build Pipeline ⭐⭐
 
 ## Story
 The development team wants every commit to be validated before merging. To enforce quality standards across the project, you have been tasked with creating the team's first **GitHub Actions** CI pipeline.

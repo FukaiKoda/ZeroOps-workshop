@@ -84,6 +84,7 @@ class LoginScreen(Screen):
         self._poll_state: str | None = None
         self._poll_timer = None
         self._client: ZeroOpsClient | None = None
+        self._logging_in: bool = False  # guard against concurrent poll callbacks
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -170,22 +171,30 @@ class LoginScreen(Screen):
 
     async def _poll_auth(self) -> None:
         """Called every 2s by the interval timer to check OAuth completion."""
-        if not self._poll_state or not self._client:
+        if not self._poll_state or not self._client or self._logging_in:
             return
 
         try:
             result = await self._client.poll_login(self._poll_state)
-        except Exception:
+        except Exception as e:
+            # Transient network error — keep polling, log a hint
+            self.query_one("#status-label", Label).update(
+                f"Retrying... ({e})"
+            )
             return
 
         status = result.get("status")
 
         if status == "complete":
+            self._logging_in = True
             self._cancel_poll()
             token = result.get("token")
             if token:
                 save_token(token)
-                await self._on_login_success()
+                try:
+                    await self._on_login_success()
+                except Exception as exc:
+                    self._show_error(f"Login error: {exc}")
             else:
                 self._show_error("Authentication completed but no token received.")
 
@@ -200,23 +209,36 @@ class LoginScreen(Screen):
             self._client = None
 
         # Fresh client to pick up saved JWT token header
-        client = ZeroOpsClient()
+        has_repository = False
         try:
-            me = await client.get_me()
-        except Exception:
-            me = {}
-        finally:
-            await client.close()
+            client = ZeroOpsClient()
+            try:
+                me = await client.get_me()
+            finally:
+                await client.close()
 
-        settings.USER_ID = me.get("github_username", settings.USER_ID)
+            settings.USER_ID = me.get("github_username", settings.USER_ID)
+            has_repository = bool(me.get("has_repository"))
+        except Exception as e:
+            # Profile fetch failed — still proceed, we have a valid token
+            self.notify(
+                f"Logged in, but could not fetch profile: {e}",
+                severity="warning",
+                timeout=5,
+            )
+
         self.notify(
             f"Welcome, @{settings.USER_ID}! 🎉", severity="success", timeout=4
         )
 
-        if me.get("has_repository"):
-            self.app.switch_screen("dashboard")
-        else:
-            self.app.switch_screen("onboarding")
+        # Always navigate away from the login screen
+        try:
+            if has_repository:
+                self.app.switch_screen("dashboard")
+            else:
+                self.app.switch_screen("onboarding")
+        except Exception as nav_exc:
+            self._show_error(f"Navigation error: {nav_exc}")
 
     def _cancel_poll(self) -> None:
         if self._poll_timer:

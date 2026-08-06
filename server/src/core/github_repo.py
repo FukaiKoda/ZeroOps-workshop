@@ -115,54 +115,67 @@ async def verify_exercise_folder_exists(
     return exercise_id in dirs
 
 
-async def fetch_workflow_files(owner: str, repo: str, token: str) -> dict[str, str]:
+async def fetch_directory(
+    owner: str, repo: str, directory_path: str, token: str
+) -> dict[str, str]:
     """
-    Fetch all YAML files inside .github/workflows/ from the repository.
-    Returns a dict of { filename: file_content_string }.
+    Recursively fetch all files inside `directory_path` from the repository.
+    Returns a dict mapping relative file path (relative to directory_path) -> string content.
     Uses the GitHub Contents API (base64 encoded blobs).
     """
     import base64
 
     result: dict[str, str] = {}
+    clean_path = directory_path.strip("/")
+
     async with httpx.AsyncClient() as client:
-        # List the workflows directory
-        list_resp = await client.get(
-            f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/.github/workflows",
-            headers=_headers(token),
-            timeout=10.0,
-        )
-        if list_resp.status_code != 200:
-            return result  # directory doesn't exist or no access
+        async def _fetch_recursive(current_path: str):
+            url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{current_path}"
+            resp = await client.get(url, headers=_headers(token), timeout=10.0)
+            if resp.status_code != 200:
+                return
 
-        items = list_resp.json()
-        if not isinstance(items, list):
-            return result
+            items = resp.json()
+            if not isinstance(items, list):
+                if isinstance(items, dict) and items.get("type") == "file":
+                    items = [items]
+                else:
+                    return
 
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            name = item.get("name", "")
-            if not (name.endswith(".yml") or name.endswith(".yaml")):
-                continue
-            # Fetch file content
-            file_resp = await client.get(
-                item["url"],
-                headers=_headers(token),
-                timeout=10.0,
-            )
-            if file_resp.status_code != 200:
-                continue
-            file_data = file_resp.json()
-            encoding = file_data.get("encoding", "")
-            content_raw = file_data.get("content", "")
-            if encoding == "base64":
-                try:
-                    content = base64.b64decode(content_raw).decode("utf-8")
-                    result[name] = content
-                except Exception:
-                    pass
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                item_type = item.get("type")
+                item_path = item.get("path", "")
+                if item_type == "dir":
+                    await _fetch_recursive(item_path)
+                elif item_type == "file":
+                    file_url = item.get("url")
+                    if not file_url:
+                        continue
+                    file_resp = await client.get(file_url, headers=_headers(token), timeout=10.0)
+                    if file_resp.status_code != 200:
+                        continue
+                    file_data = file_resp.json()
+                    encoding = file_data.get("encoding", "")
+                    content_raw = file_data.get("content", "")
+                    if encoding == "base64":
+                        try:
+                            content = base64.b64decode(content_raw).decode("utf-8")
+                            rel_path = item_path[len(clean_path):].lstrip("/") if item_path.startswith(clean_path) else item_path
+                            result[rel_path] = content
+                        except Exception:
+                            pass
+
+        await _fetch_recursive(clean_path)
 
     return result
+
+
+async def fetch_workflow_files(owner: str, repo: str, token: str) -> dict[str, str]:
+    """Fetch all workflow files inside .github/workflows for backward compatibility."""
+    return await fetch_directory(owner, repo, ".github/workflows", token)
+
 
 
 # ---------------------------------------------------------------------------

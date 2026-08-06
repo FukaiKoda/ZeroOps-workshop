@@ -1,7 +1,10 @@
 {
   "id": "ex01_github_actions_build_pipeline",
+  "folder": "ex01_build_pipeline",
+  "version": 1,
   "title": "Build Pipeline",
   "points": 20,
   "requirements": ["ex00_github_actions_hello_workflow"],
   "type": "github_actions"
 }
+

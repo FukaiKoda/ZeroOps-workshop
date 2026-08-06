@@ -6,13 +6,21 @@ from typing import Tuple, List, Dict, Any
 
 
 def _find_workflow_files(cwd: Path) -> List[Path]:
-    workflows_dir = cwd / ".github" / "workflows"
-    if not workflows_dir.exists():
-        return []
-    files = []
-    for ext in ["*.yml", "*.yaml"]:
-        files.extend(workflows_dir.glob(ext))
-    return sorted(files)
+    """Find workflow files inside the isolated exercise folder."""
+    files: List[Path] = []
+    search_dirs = [cwd, cwd / ".github" / "workflows", cwd / "workflows"]
+    for d in search_dirs:
+        if d.exists() and d.is_dir():
+            for ext in ["*.yml", "*.yaml"]:
+                files.extend(d.glob(ext))
+    seen = set()
+    unique_files = []
+    for f in files:
+        if f.resolve() not in seen:
+            seen.add(f.resolve())
+            unique_files.append(f)
+    return sorted(unique_files)
+
 
 
 def _parse_yaml(content: str) -> Tuple[bool, Any, str]:
