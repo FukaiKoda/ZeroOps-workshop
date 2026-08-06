@@ -82,7 +82,10 @@ async def get_status(
     `user_id` path param is kept for client compatibility but the identity
     comes from the JWT — students cannot query other users' status.
     """
-    current_exercise_id = _find_current_exercise(current_user)
+    current_exercise_id = await _find_current_exercise(db, current_user)
+    if current_user.current_exercise_id != current_exercise_id:
+        current_user.current_exercise_id = current_exercise_id
+        await db.commit()
 
     return StatusResponse(
         user_id=str(current_user.id),
@@ -468,21 +471,25 @@ async def grade_submission(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _find_current_exercise(user: User) -> Optional[str]:
+async def _find_current_exercise(db: AsyncSession, user: User) -> Optional[str]:
     """
     Find the first unsolved exercise for the user's current level.
     Falls back to the first exercise of the next level if all are solved.
+    Queries the database directly to ensure fresh submission status.
     """
-    # Build a progress dict from submission history (latest status per exercise)
-    progress: dict[str, str] = {}
-    for sub in sorted(user.submissions, key=lambda s: s.submitted_at):
-        progress[sub.exercise_id] = sub.status
+    result = await db.execute(
+        select(ExerciseSubmission.exercise_id).where(
+            ExerciseSubmission.user_id == user.id,
+            ExerciseSubmission.status == "passed",
+        )
+    )
+    passed_exercise_ids = set(result.scalars().all())
 
     for level_offset in range(2):
         level = user.current_level + level_offset
         exercises = exercise_db.list_exercises_for_level(level)
         for ex_id in exercises:
-            if progress.get(ex_id) != "passed":
+            if ex_id not in passed_exercise_ids:
                 return ex_id
 
     return None
@@ -499,27 +506,38 @@ async def _update_user_progress(
     Returns the new level.
     """
     if score > 0:
-        # Award XP from exercise metadata
-        details = exercise_db.get_exercise_details(exercise_id)
-        if details:
-            user.total_xp += details["meta"].points
+        # Check if user has already passed this exercise previously
+        res = await db.execute(
+            select(ExerciseSubmission).where(
+                ExerciseSubmission.user_id == user.id,
+                ExerciseSubmission.exercise_id == exercise_id,
+                ExerciseSubmission.status == "passed",
+            )
+        )
+        passed_submissions = res.scalars().all()
+
+        # Award XP only if this is the first time passing the exercise
+        if len(passed_submissions) <= 1:
+            details = exercise_db.get_exercise_details(exercise_id)
+            if details:
+                user.total_xp += details["meta"].points
 
         # Check if all exercises in the current level are now solved
         exercises = exercise_db.list_exercises_for_level(user.current_level)
         if exercises:
-            # Re-query submissions to get fresh state
             result = await db.execute(
-                select(ExerciseSubmission)
-                .where(
+                select(ExerciseSubmission.exercise_id).where(
                     ExerciseSubmission.user_id == user.id,
                     ExerciseSubmission.status == "passed",
                 )
             )
-            solved = {s.exercise_id for s in result.scalars().all()}
+            solved = set(result.scalars().all())
             solved.add(exercise_id)  # include current
 
             if all(ex in solved for ex in exercises):
                 if exercise_db.level_exists(user.current_level + 1):
                     user.current_level += 1
 
+    # Persist updated active exercise in users table
+    user.current_exercise_id = await _find_current_exercise(db, user)
     return user.current_level

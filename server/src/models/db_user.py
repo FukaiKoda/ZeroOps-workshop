@@ -23,6 +23,7 @@ class User(Base):
 
     # Progress
     current_level: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    current_exercise_id: Mapped[str | None] = mapped_column(String(255), nullable=True, default=None)
     total_xp: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Timestamps

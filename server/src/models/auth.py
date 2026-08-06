@@ -38,6 +38,7 @@ class UserProfileResponse(BaseModel):
     github_avatar: str
     github_email: Optional[str] = None
     current_level: int
+    current_exercise_id: Optional[str] = None
     total_xp: int
     has_repository: bool
     repository: Optional[RepositoryInfo] = None

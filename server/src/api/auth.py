@@ -233,6 +233,7 @@ def _build_profile_response(user: User) -> UserProfileResponse:
         github_avatar=user.github_avatar or "",
         github_email=user.github_email,
         current_level=user.current_level,
+        current_exercise_id=user.current_exercise_id,
         total_xp=user.total_xp,
         has_repository=user.repository is not None,
         repository=repo_info,
