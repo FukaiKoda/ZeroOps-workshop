@@ -8,6 +8,8 @@ class ZeroOpsClient:
     def __init__(self):
         self.base_url = settings.ZEROOPS_SERVER_URL
         token = load_token()
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[ZeroOpsClient.__init__] loaded token present: {bool(token)}\n")
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -44,11 +46,20 @@ class ZeroOpsClient:
 
     async def get_me(self) -> Dict[str, Any]:
         """Fetch the authenticated user's GitHub profile and repository info."""
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[get_me] 1 before sending GET /v1/auth/me...\n")
         try:
             response = await self.client.get("/v1/auth/me")
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[get_me] 2 response status: {response.status_code}\n")
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[get_me] 3 data parsed: {data}\n")
+            return data
         except httpx.HTTPError as e:
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[get_me] EXCEPTION: {e}\n")
             return {"error": str(e)}
 
     # -----------------------------------------------------------------------

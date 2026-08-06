@@ -139,6 +139,14 @@ class LoginScreen(Screen):
 
     async def _start_oauth(self) -> None:
         """Initiate OAuth: get URL from server, open browser, start polling."""
+        if self._logging_in:
+            return
+
+        self._logging_in = True
+
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_start_oauth] Starting OAuth flow...\n")
+
         self.query_one("#github-btn", Button).disabled = True
         self.query_one("#status-label", Label).update("Connecting to server...")
 
@@ -146,18 +154,28 @@ class LoginScreen(Screen):
         try:
             data = await self._client.initiate_login()
         except Exception as e:
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_start_oauth] Error initiating login: {e}\n")
             self._show_error(f"Could not reach server: {e}")
             return
 
         if "error" in data or "auth_url" not in data:
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_start_oauth] Failed to initiate login: {data}\n")
             self._show_error("Failed to initiate login. Is the server running?")
             return
 
         auth_url = data["auth_url"]
         self._poll_state = data["state"]
 
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_start_oauth] Opening browser for state={self._poll_state} url={auth_url}\n")
+
         # Open browser
         webbrowser.open(auth_url)
+
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_start_oauth] Browser opened call finished. Setting poll interval timer.\n")
 
         # Show waiting UI
         self.query_one("#status-label", Label).update(
@@ -168,15 +186,21 @@ class LoginScreen(Screen):
 
         # Start polling every 2 seconds
         self._poll_timer = self.set_interval(2.0, self._poll_auth)
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_start_oauth] Timer set successfully.\n")
 
     async def _poll_auth(self) -> None:
         """Called every 2s by the interval timer to check OAuth completion."""
-        if not self._poll_state or not self._client or self._logging_in:
+        if not self._poll_state or not self._client:
             return
 
         try:
             result = await self._client.poll_login(self._poll_state)
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_poll_auth] poll_login result={result}\n")
         except Exception as e:
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_poll_auth] Exception during poll_login: {e}\n")
             # Transient network error — keep polling, log a hint
             self.query_one("#status-label", Label).update(
                 f"Retrying... ({e})"
@@ -186,40 +210,77 @@ class LoginScreen(Screen):
         status = result.get("status")
 
         if status == "complete":
-            self._logging_in = True
-            self._cancel_poll()
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_poll_auth] status is COMPLETE! Token attached: {bool(result.get('token'))}\n")
+            
+            # Stop polling timer without re-enabling UI controls prematurely
+            if self._poll_timer:
+                self._poll_timer.stop()
+                self._poll_timer = None
+            self._poll_state = None
+
             token = result.get("token")
             if token:
                 save_token(token)
-                try:
-                    await self._on_login_success()
-                except Exception as exc:
-                    self._show_error(f"Login error: {exc}")
+                with open("/tmp/zeroops_debug.log", "a") as f:
+                    f.write(f"[_poll_auth] Launching _on_login_success as a Textual worker\n")
+                self.run_worker(self._on_login_success(), exclusive=True, thread=False)
             else:
                 self._show_error("Authentication completed but no token received.")
 
         elif status == "expired":
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_poll_auth] status is EXPIRED\n")
             self._cancel_poll()
             self._show_error("Authorization window expired. Please try again.")
 
+    async def on_unmount(self) -> None:
+        """Clean up timer and client resources when screen is unmounted/switched."""
+        if self._poll_timer:
+            self._poll_timer.stop()
+            self._poll_timer = None
+        self._poll_state = None
+        if self._client:
+            try:
+                await self._client.close()
+            except Exception:
+                pass
+            self._client = None
+
     async def _on_login_success(self) -> None:
         """Fetch profile and route to the correct screen."""
-        if self._client:
-            await self._client.close()
-            self._client = None
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_on_login_success] ENTERED\n")
+
+        # Stop timer safely without closing client in-flight
+        if self._poll_timer:
+            self._poll_timer.stop()
+            self._poll_timer = None
+        self._poll_state = None
+        self._client = None
+
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_on_login_success] Polling stopped and polling client detached cleanly.\n")
 
         # Fresh client to pick up saved JWT token header
         has_repository = False
         try:
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_on_login_success] [C] Before creating fresh ZeroOpsClient and calling get_me()\n")
             client = ZeroOpsClient()
             try:
                 me = await client.get_me()
+                with open("/tmp/zeroops_debug.log", "a") as f:
+                    f.write(f"[_on_login_success] [D] get_me() returned: {me}\n")
             finally:
                 await client.close()
 
             settings.USER_ID = me.get("github_username", settings.USER_ID)
             has_repository = bool(me.get("has_repository"))
         except Exception as e:
+            import traceback
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_on_login_success] get_me() exception: {e}\n{traceback.format_exc()}\n")
             # Profile fetch failed — still proceed, we have a valid token
             self.notify(
                 f"Logged in, but could not fetch profile: {e}",
@@ -231,13 +292,23 @@ class LoginScreen(Screen):
             f"Welcome, @{settings.USER_ID}! 🎉", severity="success", timeout=4
         )
 
+        with open("/tmp/zeroops_debug.log", "a") as f:
+            f.write(f"[_on_login_success] Attempting switch_screen. has_repository={has_repository}\n")
+
         # Always navigate away from the login screen
         try:
             if has_repository:
-                self.app.switch_screen("dashboard")
+                from tui.dashboard import Dashboard
+                self.app.switch_screen(Dashboard())
             else:
-                self.app.switch_screen("onboarding")
+                from tui.onboarding import OnboardingScreen
+                self.app.switch_screen(OnboardingScreen())
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_on_login_success] switch_screen SUCCESS\n")
         except Exception as nav_exc:
+            import traceback
+            with open("/tmp/zeroops_debug.log", "a") as f:
+                f.write(f"[_on_login_success] switch_screen EXCEPTION: {nav_exc}\n{traceback.format_exc()}\n")
             self._show_error(f"Navigation error: {nav_exc}")
 
     def _cancel_poll(self) -> None:
@@ -245,6 +316,7 @@ class LoginScreen(Screen):
             self._poll_timer.stop()
             self._poll_timer = None
         self._poll_state = None
+        self._logging_in = False
 
         # Reset UI
         try:

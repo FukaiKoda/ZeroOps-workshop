@@ -126,6 +126,7 @@ async def oauth_callback(
 
     # Mark state as complete so the polling client can pick it up
     completed = complete_state(state, session_token)
+    print(f"[SERVER OAUTH CALLBACK] state={state[:10]}... user={user.github_username} completed={completed}", flush=True)
     if not completed:
         return HTMLResponse(
             _html_result(
@@ -158,6 +159,7 @@ async def poll_auth(state: str, request: Request):
     then returns {status: "complete", token: "<jwt>"}.
     """
     result = poll_state(state)
+    print(f"[SERVER POLL] state={state[:10]}... status={result.get('status')} token_present={bool(result.get('token'))}", flush=True)
     return PollResponse(status=result["status"], token=result.get("token"))
 
 
