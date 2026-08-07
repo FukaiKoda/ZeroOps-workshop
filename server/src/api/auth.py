@@ -80,7 +80,9 @@ async def initiate_login(request: Request):
             ),
         )
     state = create_state_token()
-    auth_url = build_auth_url(state)
+    base_url = str(request.base_url).rstrip("/")
+    redirect_uri = f"{base_url}/v1/auth/callback"
+    auth_url = build_auth_url(state, redirect_uri=redirect_uri)
     return LoginInitResponse(auth_url=auth_url, state=state)
 
 
@@ -100,8 +102,10 @@ async def oauth_callback(
     Exchanges the code for a token, upserts the user, and marks the state complete.
     Returns an HTML page the browser can display while the TUI resumes.
     """
+    base_url = str(request.base_url).rstrip("/")
+    redirect_uri = f"{base_url}/v1/auth/callback"
     # Exchange code for OAuth token
-    access_token = await exchange_code_for_token(code)
+    access_token = await exchange_code_for_token(code, redirect_uri=redirect_uri)
     if not access_token:
         return HTMLResponse(
             _html_result("Authentication Failed", "Could not exchange code for token.", False),

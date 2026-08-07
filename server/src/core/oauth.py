@@ -17,25 +17,29 @@ GITHUB_API_BASE = "https://api.github.com"
 OAUTH_SCOPES = "read:user user:email repo"
 
 
-def build_auth_url(state: str) -> str:
+def build_auth_url(state: str, redirect_uri: Optional[str] = None) -> str:
     """
     Build the GitHub OAuth authorization URL.
     The user is redirected here in their browser to authorize the app.
     """
+    if not redirect_uri:
+        redirect_uri = f"http://localhost:{settings.PORT}/v1/auth/callback"
     params = urlencode({
         "client_id": settings.GITHUB_CLIENT_ID,
-        "redirect_uri": f"http://localhost:{settings.PORT}/v1/auth/callback",
+        "redirect_uri": redirect_uri,
         "scope": OAUTH_SCOPES,
         "state": state,
     })
     return f"{GITHUB_AUTHORIZE_URL}?{params}"
 
 
-async def exchange_code_for_token(code: str) -> Optional[str]:
+async def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None) -> Optional[str]:
     """
     Exchange an OAuth authorization code for an access token.
     Returns the token string or None if the exchange fails.
     """
+    if not redirect_uri:
+        redirect_uri = f"http://localhost:{settings.PORT}/v1/auth/callback"
     async with httpx.AsyncClient() as client:
         response = await client.post(
             GITHUB_TOKEN_URL,
@@ -44,7 +48,7 @@ async def exchange_code_for_token(code: str) -> Optional[str]:
                 "client_id": settings.GITHUB_CLIENT_ID,
                 "client_secret": settings.GITHUB_CLIENT_SECRET,
                 "code": code,
-                "redirect_uri": f"http://localhost:{settings.PORT}/v1/auth/callback",
+                "redirect_uri": redirect_uri,
             },
             timeout=10.0,
         )
