@@ -10,7 +10,7 @@ _KEYRING_USERNAME = "session_token"
 
 
 class Settings(BaseSettings):
-    ZEROOPS_SERVER_URL: str = "http://localhost:8000"
+    ZEROOPS_SERVER_URL: str = "http://<ZEROOPS_SERVER_IP>:8000"
 
     # Legacy fields — kept for compatibility; USER_ID now comes from GitHub profile
     USER_ID: str = getpass.getuser()
