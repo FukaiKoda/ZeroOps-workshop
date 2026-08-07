@@ -1,6 +1,6 @@
 import httpx
 from typing import Dict, Any, Optional
-from utils.config import settings, load_token
+from utils.config import settings, load_token, log_debug
 from utils.executor import LocalGrader
 
 
@@ -8,8 +8,7 @@ class ZeroOpsClient:
     def __init__(self):
         self.base_url = settings.ZEROOPS_SERVER_URL
         token = load_token()
-        with open("/tmp/zeroops_debug.log", "a") as f:
-            f.write(f"[ZeroOpsClient.__init__] loaded token present: {bool(token)}\n")
+        log_debug(f"[ZeroOpsClient.__init__] loaded token present: {bool(token)}")
         headers = {}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -46,20 +45,16 @@ class ZeroOpsClient:
 
     async def get_me(self) -> Dict[str, Any]:
         """Fetch the authenticated user's GitHub profile and repository info."""
-        with open("/tmp/zeroops_debug.log", "a") as f:
-            f.write(f"[get_me] 1 before sending GET /v1/auth/me...\n")
+        log_debug("[get_me] 1 before sending GET /v1/auth/me...")
         try:
             response = await self.client.get("/v1/auth/me")
-            with open("/tmp/zeroops_debug.log", "a") as f:
-                f.write(f"[get_me] 2 response status: {response.status_code}\n")
+            log_debug(f"[get_me] 2 response status: {response.status_code}")
             response.raise_for_status()
             data = response.json()
-            with open("/tmp/zeroops_debug.log", "a") as f:
-                f.write(f"[get_me] 3 data parsed: {data}\n")
+            log_debug(f"[get_me] 3 data parsed: {data}")
             return data
         except httpx.HTTPError as e:
-            with open("/tmp/zeroops_debug.log", "a") as f:
-                f.write(f"[get_me] EXCEPTION: {e}\n")
+            log_debug(f"[get_me] EXCEPTION: {e}")
             return {"error": str(e)}
 
     # -----------------------------------------------------------------------

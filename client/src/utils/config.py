@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Token storage path (fallback when keyring is unavailable)
     TOKEN_FILE: Path = Path.home() / ".config" / "zeroops" / "token"
+    DEBUG_LOG_FILE: Path = Path.home() / ".zeroops" / "debug.log"
 
     class Config:
         env_file = ".env"
@@ -27,6 +28,16 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def log_debug(message: str) -> None:
+    """Safely append debug logs to user-isolated ~/.zeroops/debug.log."""
+    try:
+        settings.DEBUG_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(settings.DEBUG_LOG_FILE, "a") as f:
+            f.write(f"{message}\n")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
