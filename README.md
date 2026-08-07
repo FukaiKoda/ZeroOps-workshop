@@ -39,6 +39,7 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
 .
 ├── CLIENT.md               # Client documentation
 ├── SERVER.md               # Server documentation
+├── INFRASTRUCTURE.md       # Infrastructure & Deployment Requirements
 ├── CONTRIBUTING.md         # Contribution guidelines
 ├── README.md               # This file
 ├── client/                 # Textual TUI Application
@@ -101,5 +102,9 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
 ## 5. Security Note
 While the server uses nonces to prevent simple replay attacks, the client-side grading model relies on the user not actively tampering with the local `check.py` execution environment. For a workshop setting, this trade-off allows for a much richer, interactive experience with real infrastructure tools.
 
+## Infrastructure & Deployment
+For detailed network, firewall, OAuth, database, and system requirements needed by your infrastructure team, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
+
 ## Contributing
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
+
