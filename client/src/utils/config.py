@@ -2,7 +2,10 @@ import os
 import getpass
 import socket
 from pathlib import Path
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Base directory for the client package
+_CLIENT_DIR = Path(__file__).resolve().parent.parent.parent
 
 # Keyring service name for token storage
 _KEYRING_SERVICE = "zeroops"
@@ -10,6 +13,12 @@ _KEYRING_USERNAME = "session_token"
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=(_CLIENT_DIR / ".env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     ZEROOPS_SERVER_URL: str = "http://<ZEROOPS_SERVER_IP>:8000"
 
     # Legacy fields — kept for compatibility; USER_ID now comes from GitHub profile
@@ -21,10 +30,6 @@ class Settings(BaseSettings):
     # Token storage path (fallback when keyring is unavailable)
     TOKEN_FILE: Path = Path.home() / ".config" / "zeroops" / "token"
     DEBUG_LOG_FILE: Path = Path.home() / ".zeroops" / "debug.log"
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
 
 
 settings = Settings()
