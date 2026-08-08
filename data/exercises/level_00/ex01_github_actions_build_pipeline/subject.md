@@ -26,28 +26,6 @@ Your pipeline must perform the following sequence:
 .github/workflows/build.yml
 ```
 
-## Workflow Example
-```yaml
-name: Build Pipeline
-
-on: [push]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Print Python Version
-        run: python --version
-
-      - name: Print Current Directory
-        run: pwd
-
-      - name: List Repository Files
-        run: ls -la
-```
 
 ## How to Submit
 1. In your local repository clone, create `.github/workflows/build.yml` with your workflow definition.

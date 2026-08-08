@@ -1,4 +1,4 @@
-# Exercise 11 — Final Challenge ⭐⭐⭐⭐
+# Exercise 10 — Final Challenge ⭐⭐⭐⭐
 
 ## Story
 The CTO wants a single, robust production continuous integration pipeline that incorporates almost everything you've learned throughout the workshop into a clean, reproducible workflow.
@@ -8,9 +8,9 @@ Build an end-to-end production CI pipeline incorporating triggers, checkout, act
 
 ## Target Directory
 In your portfolio repository (`zeroops-devops`), create the exercise directory:
-`ex11_final_challenge/`
+`ex10_final_challenge/`
 
-Create your workflow file inside this folder (e.g. `ex11_final_challenge/workflow.yml`).
+Create your workflow file inside this folder (e.g. `ex10_final_challenge/workflow.yml`).
 
 ## Pipeline Specification
 
@@ -24,42 +24,4 @@ Your production workflow must satisfy the following sequence and rules:
 6. **Run Tests**: Execute step running `pytest` (or `python -m pytest`).
 7. **Success Notification**: Print a final pipeline success message.
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Production CI Pipeline
-on:
-  pull_request:
-  push:
-    branches:
-      - main
-
-env:
-  PROJECT_NAME: "ZeroOps Production"
-
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Environment Info
-        run: echo "Building $PROJECT_NAME"
-
-      - name: Install Dependencies
-        run: pip install pytest
-
-      - name: Run Tests
-        run: pytest
-
-      - name: Success Message
-        run: echo "🎉 Pipeline executed successfully!"
-```

@@ -24,25 +24,4 @@ Configure your workflow `on:` trigger section to include:
 > 💡 **Key Concept: Event Triggers & Branch Filters**
 > Workflows can trigger on specific events like `push`, `pull_request`, or `schedule`. Branch filters (`branches:`) restrict execution so pipelines only run when relevant branches change.
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Workflow Triggers
-on:
-  pull_request:
-  push:
-    branches:
-      - main
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Validate Triggers
-        run: echo "Triggered on PR or push to main!"
-```

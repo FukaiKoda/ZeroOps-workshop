@@ -1,0 +1,9 @@
+{
+  "id": "ex09_secrets",
+  "folder": "ex09_secrets",
+  "version": 1,
+  "title": "Secrets",
+  "points": 30,
+  "requirements": ["ex08_environment_variables"],
+  "type": "github_actions"
+}

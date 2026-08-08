@@ -29,27 +29,4 @@ Your workflow must contain a single job that performs:
 > 
 > Make sure you use the explicit `${{ github.X }}` context expression syntax in this exercise!
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: GitHub Context Variables
-on: push
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Echo Repository
-        run: echo "Repository: ${{ github.repository }}"
-
-      - name: Echo Branch
-        run: echo "Branch: ${{ github.ref_name }}"
-
-      - name: Echo Commit SHA
-        run: echo "Commit SHA: ${{ github.sha }}"
-```

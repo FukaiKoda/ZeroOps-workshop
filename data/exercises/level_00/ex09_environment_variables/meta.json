@@ -1,9 +1,0 @@
-{
-  "id": "ex09_environment_variables",
-  "folder": "ex09_environment_variables",
-  "version": 1,
-  "title": "Environment Variables",
-  "points": 30,
-  "requirements": ["ex08_ci_detective"],
-  "type": "github_actions"
-}

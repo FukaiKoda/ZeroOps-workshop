@@ -27,31 +27,4 @@ Reuse Exercise 03's `backend` and `frontend` jobs:
 > 💡 **Key Concept: Controlling Execution Order with `needs:`**
 > By default, jobs in GitHub Actions run concurrently. Adding `needs: <job_id>` forces a job to wait for the specified job(s) to complete successfully before starting.
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Job Dependencies
-on: push
-
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run Backend Tests
-        run: echo "Backend tests passing"
-
-  frontend:
-    needs: backend
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Build Frontend
-        run: echo "Building frontend after backend success"
-```

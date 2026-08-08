@@ -1,4 +1,4 @@
-# Exercise 09 — Environment Variables ⭐⭐
+# Exercise 08 — Environment Variables ⭐⭐
 
 ## Story
 Configure reusable workflow-wide or job-level configuration values without hardcoding them into every step.
@@ -8,9 +8,9 @@ Learn how to define environment variables in an `env:` block and access them ins
 
 ## Target Directory
 In your portfolio repository (`zeroops-devops`), create the exercise directory:
-`ex09_environment_variables/`
+`ex08_environment_variables/`
 
-Create your workflow file inside this folder (e.g. `ex09_environment_variables/workflow.yml`).
+Create your workflow file inside this folder (e.g. `ex08_environment_variables/workflow.yml`).
 
 ## Tasks
 
@@ -27,27 +27,6 @@ Define a workflow containing:
 
 > 💡 **Key Concept: `env:` Shell Variables vs. `${{ github.X }}` Context Expressions**
 > - **`${{ github.X }}` (Exercise 02)** is evaluated by GitHub Actions before sending the script to the runner.
-> - **`$PROJECT_NAME` (Exercise 09)** is an environment variable passed into the shell and evaluated at runtime by Bash.
+> - **`$PROJECT_NAME` (Exercise 08)** is an environment variable passed into the shell and evaluated at runtime by Bash.
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Environment Variables
-on: push
-
-env:
-  PROJECT_NAME: "ZeroOps"
-  AUTHOR: "DevOpsTeam"
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Print Env Variables
-        run: echo "$PROJECT_NAME by $AUTHOR"
-```

@@ -1,4 +1,4 @@
-# Exercise 10 — Secrets ⭐⭐⭐
+# Exercise 09 — Secrets ⭐⭐⭐
 
 ## Story
 API keys, access tokens, and passwords must never be committed to source code or hardcoded in workflow files. Pass encrypted secrets securely into jobs using GitHub Repository Secrets.
@@ -16,9 +16,9 @@ Before writing your workflow:
 
 ## Target Directory
 In your portfolio repository (`zeroops-devops`), create the exercise directory:
-`ex10_secrets/`
+`ex09_secrets/`
 
-Create your workflow file inside this folder (e.g. `ex10_secrets/workflow.yml`).
+Create your workflow file inside this folder (e.g. `ex09_secrets/workflow.yml`).
 
 ## Tasks
 
@@ -40,23 +40,4 @@ Define a workflow containing:
 > ⚠️ **Security Habit: Safe Secret Debugging**
 > GitHub Actions automatically masks secrets printed to build logs. However, good security hygiene dictates **never** echoing secret values directly. Printing character length (`${#API_KEY}`) verifies the secret exists and is non-empty without leaking data.
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Secrets Management
-on: push
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Safe Secret Debugging
-        env:
-          API_KEY: ${{ secrets.API_KEY }}
-        run: echo 'Key length:' ${#API_KEY}
-```

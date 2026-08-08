@@ -1,4 +1,4 @@
-"""Validator for Level 00 Exercise 09 — Environment Variables."""
+"""Validator for Level 00 Exercise 08 — Environment Variables."""
 
 import yaml
 from pathlib import Path
@@ -89,7 +89,7 @@ def grade(code: str, cwd: Path) -> Tuple[bool, str]:
     elif code.strip():
         contents.append(("workflow.yml", code))
     else:
-        return False, "No workflow file found in 'ex09_environment_variables/'."
+        return False, "No workflow file found in 'ex08_environment_variables/'."
 
     all_errors = []
     valid_count = 0

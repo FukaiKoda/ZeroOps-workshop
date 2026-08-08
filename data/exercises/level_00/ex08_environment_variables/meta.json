@@ -1,0 +1,9 @@
+{
+  "id": "ex08_environment_variables",
+  "folder": "ex08_environment_variables",
+  "version": 1,
+  "title": "Environment Variables",
+  "points": 30,
+  "requirements": ["ex07_marketplace_actions"],
+  "type": "github_actions"
+}

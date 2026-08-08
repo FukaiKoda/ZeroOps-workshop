@@ -32,30 +32,4 @@ Define a workflow containing a `jobs:` block with **two top-level jobs**: `backe
 > - **`steps`** inside a single job execute **sequentially** (one after another in the same runner environment).
 > - **`jobs`** at the top level execute **in parallel** by default (on separate virtual runner instances).
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Multi-Job Pipeline
-on: push
-
-jobs:
-  backend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Test Backend
-        run: echo "Testing backend"
-
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Test Frontend
-        run: echo "Testing frontend"
-```

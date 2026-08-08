@@ -1,9 +1,0 @@
-{
-  "id": "ex10_secrets",
-  "folder": "ex10_secrets",
-  "version": 1,
-  "title": "Secrets",
-  "points": 40,
-  "requirements": ["ex09_environment_variables"],
-  "type": "github_actions"
-}

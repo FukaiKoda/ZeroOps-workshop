@@ -46,22 +46,6 @@ Create the file `.github/workflows/hello.yml` in your repository with the follow
 
 ---
 
-## Example Solution
-
-```yaml
-name: Hello ZeroOps
-
-on: push
-
-jobs:
-  hello:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Say Hello
-        run: echo "Welcome to ZeroOps!"
-```
-
----
 
 ## How to Submit
 

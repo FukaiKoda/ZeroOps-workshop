@@ -1,9 +1,0 @@
-{
-  "id": "ex11_final_challenge",
-  "folder": "ex11_final_challenge",
-  "version": 1,
-  "title": "Final Challenge",
-  "points": 50,
-  "requirements": ["ex10_secrets"],
-  "type": "github_actions"
-}

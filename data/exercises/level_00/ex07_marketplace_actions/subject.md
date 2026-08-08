@@ -27,26 +27,4 @@ Define a workflow that performs:
 > - **Action Pinning** (e.g. `@v5` or commit SHA) prevents breaking changes when third-party actions update.
 > - **`with:`** block passes input parameters required by the action.
 
----
 
-## Example Workflow Structure
-
-```yaml
-name: Marketplace Actions
-on: push
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Verify Python
-        run: python --version
-```
