@@ -1,110 +1,43 @@
-# ZeroOps Workshop Platform
+# ZeroOps Client
 
-![Open Source](https://img.shields.io/badge/Open%20Source-Yes-green)
-![License](https://img.shields.io/badge/License-MIT-blue)
+Terminal User Interface (TUI) client for the **ZeroOps Workshop Platform**.
+This is a standalone client distribution for students.
 
-A technical workshop platform designed for the "ZeroOps" workshop. This system orchestrates the delivery, grading, and progress tracking of Docker and Kubernetes exercises using a **Thin Client / Thick Server** architecture, with a twist: **Client-Side Grading**.
+## Quick Setup for Students
 
-## 1. System Architecture & Responsibilities
+### 1. Prerequisites
+- Python 3.10+
+- Poetry (`pip install poetry`)
+- Git
 
-### Client (TUI)
--   **Environment:** Runs centrally on the user's machine (where they have `docker` and `kubectl` access).
--   **Interface:** A rich Terminal User Interface (TUI) built with `Textual`.
--   **Execution Engine:** The client receives grading scripts (`check.py`) from the server and executes them **locally**. This allows the grading logic to inspect the user's actual system state (e.g., running containers, active pods) without requiring a complex remote sandbox.
--   [Read more about the Client Architecture](CLIENT.md)
+### 2. Configuration
+Copy `.env.example` to `.env` and set the ZeroOps server URL provided by your instructor:
 
-### Server (The Brain)
--   **State Management:** Tracks user progress, scores, and unlocked levels.
--   **Content Delivery:** Serves exercise metadata, subjects, and grading scripts.
--   **Protection:** Implements Rate Limiting to ensure stability under load.
--   [Read more about the Server Architecture](SERVER.md)
-
-## 2. Key Features
-
-### 🛡️ Rate Limiting
-To ensure fair usage and server stability, endpoints are rate-limited using `slowapi`.
-
-### ⚡ Client-Side Grading Flow
-1.  **Request**: User clicks "Submit". Client sends `POST /v1/grade`.
-2.  **Prepare**: Server generates a `nonce` and retrieves the `check.py` script for the exercise.
-3.  **Execute**: Client receives the script and runs it in a subprocess (`LocalGrader`).
-    -   **Level 00 (Docker)**: Checks for running containers/images.
-    -   **Level 01 (K8s)**: Validates local YAML files AND performs system checks using `kubectl`.
-4.  **Verify**: Client sends the result + `nonce` to `POST /v1/verify`.
-5.  **Update**: Server validates the `nonce`, updates the user's score/level, and invalidates the nonce.
-
-## 3. Project Structure
-
-```text
-.
-├── CLIENT.md               # Client documentation
-├── SERVER.md               # Server documentation
-├── INFRASTRUCTURE.md       # Infrastructure & Deployment Requirements
-├── CONTRIBUTING.md         # Contribution guidelines
-├── README.md               # This file
-├── client/                 # Textual TUI Application
-│   ├── src/
-│   │   ├── api/            # API Client (ZeroOpsClient)
-│   │   ├── tui/            # UI Components (login, dashboard, leaderboard, modals)
-│   │   ├── utils/          # Executor (LocalGrader), Config & Signals
-│   │   └── main.py         # Entry point
-│   └── pyproject.toml
-│
-├── server/                 # FastAPI Logic
-│   ├── src/
-│   │   ├── api/            # Routes (endpoints.py)
-│   │   ├── core/           # DB, Config, Rate Limit
-│   │   ├── models/         # Pydantic data schemas
-│   │   └── main.py         # App Entry point
-│   └── pyproject.toml
-│
-├── data/                   # The "Single Source of Truth"
-│   ├── exercises/
-│   │   ├── level_00/       # Docker Exercises (ex00 - ex09)
-│   │   └── level_01/       # Kubernetes Exercises (ex00 - ex11)
-│   └── users/              # JSON User Database
-│
-└── Makefile                # Management commands
+```bash
+cp .env.example .env
 ```
 
-## 4. Getting Started
+Edit `.env`:
+```env
+ZEROOPS_SERVER_URL=http://<school-zeroops-server-ip>:8000
+```
 
-### Prerequisites
--   Python 3.10+
--   Poetry (`pip install poetry`)
--   Docker & Kubectl (for exercises)
+### 3. Install Dependencies
+```bash
+make install
+# Or: poetry install
+```
 
-### Quick Start
+### 4. Launch the Client
+```bash
+make run
+# Or: poetry run python src/main.py tui
+```
 
-1.  **Install dependencies**:
-    ```bash
-    make install
-    ```
+---
 
-2.  **Start the Server**:
-    Open a terminal and run:
-    ```bash
-    make run-server
-    ```
-    The server will start on `http://0.0.0.0:8000`.
+## Authentication & Usage Flow
 
-3.  **Start the Client**:
-    Open a second terminal and run:
-    ```bash
-    make run-client
-    ```
-    The client will connect to `http://localhost:8000` by default.
-
-### Testing
--   `make test-health`: Check server connectivity.
--   `make test-grade`: Simulate a grading request.
-
-## 5. Security Note
-While the server uses nonces to prevent simple replay attacks, the client-side grading model relies on the user not actively tampering with the local `check.py` execution environment. For a workshop setting, this trade-off allows for a much richer, interactive experience with real infrastructure tools.
-
-## Infrastructure & Deployment
-For detailed network, firewall, OAuth, database, and system requirements needed by your infrastructure team, see [INFRASTRUCTURE.md](INFRASTRUCTURE.md).
-
-## Contributing
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines on how to get started.
-
+1. **Login with GitHub**: Click "Login with GitHub" in the TUI to open the browser authorization page.
+2. **Link Repository**: Link your student exercise repository (`owner/repo`).
+3. **Exercises & Submissions**: View exercise subjects, commit your work to your GitHub repository, and click **Submit Exercise** in the TUI. The server automatically validates your exercise files and returns your grade and feedback.

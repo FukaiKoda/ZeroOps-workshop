@@ -8,12 +8,12 @@ from api.client import ZeroOpsClient
 class LeaderboardCard(Container):
     """A card for a single leaderboard entry."""
 
-    def __init__(self, rank: int, github_username: str, xp: int, level: int):
+    def __init__(self, rank: int, github_username: str, xp: int = 0, level: int = 0):
         super().__init__()
         self.rank = rank
         self.github_username = github_username
-        self.xp = xp
-        self.level = level
+        self.xp = xp or 0
+        self.level = level or 0
 
         self.add_class("lb-card")
         if rank == 1:
@@ -271,8 +271,8 @@ class Leaderboard(Screen):
                 LeaderboardCard(
                     rank=rank,
                     github_username=entry.get("github_username", entry.get("user_id", "?")),
-                    xp=entry.get("total_xp"),
-                    level=entry.get("level"),
+                    xp=entry.get("total_xp") or 0,
+                    level=entry.get("level") or 0,
                 )
             )
 
@@ -281,8 +281,8 @@ class Leaderboard(Screen):
                 LeaderboardCard(
                     rank=i,
                     github_username=entry.get("github_username", entry.get("user_id", "?")),
-                    xp=entry.get("total_xp"),
-                    level=entry.get("level"),
+                    xp=entry.get("total_xp") or 0,
+                    level=entry.get("level") or 0,
                 )
             )
 

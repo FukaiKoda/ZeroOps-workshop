@@ -1,9 +1,0 @@
-{
-  "id": "ex02_multi_step_workflow",
-  "folder": "ex02_multi_step_workflow",
-  "version": 1,
-  "title": "GitHub Context Variables",
-  "points": 30,
-  "requirements": ["ex01_github_actions_build_pipeline"],
-  "type": "github_actions"
-}

@@ -389,7 +389,7 @@ class Dashboard(Screen):
             self._last_commit_hash = commit or self._last_commit_hash
             self.notify(
                 f"Synced! Latest commit: {short}  •  {len(folders)} folder(s) found",
-                severity="success",
+                severity="information",
                 timeout=5,
             )
             # Refresh to show updated sync info

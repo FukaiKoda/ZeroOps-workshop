@@ -1,9 +1,0 @@
-{
-  "id": "ex08_ci_detective",
-  "folder": "ex08_ci_detective",
-  "version": 1,
-  "title": "CI Detective",
-  "points": 40,
-  "requirements": ["ex07_marketplace_actions"],
-  "type": "github_actions"
-}

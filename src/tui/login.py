@@ -272,7 +272,7 @@ class LoginScreen(Screen):
             )
 
         self.notify(
-            f"Welcome, @{settings.USER_ID}! 🎉", severity="success", timeout=4
+            f"Welcome, @{settings.USER_ID}! 🎉", severity="information", timeout=4
         )
 
         log_debug(f"[_on_login_success] Attempting switch_screen. has_repository={has_repository}")

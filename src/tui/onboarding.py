@@ -167,10 +167,10 @@ class OnboardingScreen(Screen):
 
         if result.get("status") == "linked":
             repo_info = result.get("repository", {})
-            full_name = repo_info.get("full_name", f"{owner}/{repo}")
+            full_name = repo_info.get("full_name", f"{owner}/{repo}") if isinstance(repo_info, dict) else f"{owner}/{repo}"
             self.notify(
                 f"Repository '{full_name}' linked! 🚀",
-                severity="success",
+                severity="information",
                 timeout=4,
             )
             self.app.switch_screen("dashboard")
