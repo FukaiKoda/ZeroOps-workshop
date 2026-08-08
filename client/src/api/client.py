@@ -1,7 +1,6 @@
 import httpx
 from typing import Dict, Any, Optional
 from utils.config import settings, load_token, log_debug
-from utils.executor import LocalGrader
 
 
 class ZeroOpsClient:
@@ -156,33 +155,7 @@ class ZeroOpsClient:
         try:
             response = await self.client.post("/v1/grade", json=payload)
             response.raise_for_status()
-            data = response.json()
-
-            if data.get("status") == "pending" and "script_content" in data:
-                script = data["script_content"]
-                nonce = data["nonce"]
-
-                target_dir = settings.RENDU_DIR / exercise_id
-
-                success, logs = LocalGrader.execute_script(
-                    script, nonce, target_dir=target_dir
-                )
-
-                verify_payload = {
-                    "user_id": settings.USER_ID,
-                    "nonce": nonce,
-                    "result": success,
-                    "logs": logs,
-                    "commit_hash": commit_hash,
-                }
-
-                verify_response = await self.client.post(
-                    "/v1/verify", json=verify_payload
-                )
-                verify_response.raise_for_status()
-                return verify_response.json()
-
-            return data
+            return response.json()
 
         except httpx.HTTPError as e:
             return {
