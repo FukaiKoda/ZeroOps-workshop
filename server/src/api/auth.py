@@ -80,8 +80,7 @@ async def initiate_login(request: Request):
             ),
         )
     state = create_state_token()
-    base_url = str(request.base_url).rstrip("/")
-    redirect_uri = f"{base_url}/v1/auth/callback"
+    redirect_uri = _get_redirect_uri(request)
     auth_url = build_auth_url(state, redirect_uri=redirect_uri)
     return LoginInitResponse(auth_url=auth_url, state=state)
 
@@ -102,8 +101,7 @@ async def oauth_callback(
     Exchanges the code for a token, upserts the user, and marks the state complete.
     Returns an HTML page the browser can display while the TUI resumes.
     """
-    base_url = str(request.base_url).rstrip("/")
-    redirect_uri = f"{base_url}/v1/auth/callback"
+    redirect_uri = _get_redirect_uri(request)
     # Exchange code for OAuth token
     access_token = await exchange_code_for_token(code, redirect_uri=redirect_uri)
     if not access_token:
@@ -181,6 +179,15 @@ async def get_me(request: Request, current_user: User = Depends(get_current_user
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _get_redirect_uri(request: Request) -> str:
+    """Return the exact callback URI registered in the GitHub OAuth app."""
+    configured_uri = settings.GITHUB_REDIRECT_URI.strip().rstrip("/")
+    if configured_uri:
+        return configured_uri
+
+    base_url = str(request.base_url).rstrip("/")
+    return f"{base_url}/v1/auth/callback"
 
 async def _upsert_user(
     db: AsyncSession,

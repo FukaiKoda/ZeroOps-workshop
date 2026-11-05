@@ -19,7 +19,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    ZEROOPS_SERVER_URL: str = "http://<ZEROOPS_SERVER_IP>:8000"
+    # Keep local development usable when no client/.env has been created yet.
+    ZEROOPS_SERVER_URL: str = "http://localhost:8000"
 
     # Legacy fields — kept for compatibility; USER_ID now comes from GitHub profile
     USER_ID: str = getpass.getuser()

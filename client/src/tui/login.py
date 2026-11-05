@@ -158,7 +158,8 @@ class LoginScreen(Screen):
 
         if "error" in data or "auth_url" not in data:
             log_debug(f"[_start_oauth] Failed to initiate login: {data}")
-            self._show_error("Failed to initiate login. Is the server running?")
+            detail = data.get("error", "The server returned an invalid login response.")
+            self._show_error(f"Failed to initiate login: {detail}")
             return
 
         auth_url = data["auth_url"]
