@@ -550,4 +550,9 @@ async def _update_user_progress(
     # Keep a legacy cursor for older profile consumers, but calculate the next
     # exercise from submissions in this section only.
     user.current_exercise_id = await _find_current_exercise(db, user, section)
-    return exercise_db.get_exercise_level(user.current_exercise_id) or user.current_level
+    current_level = (
+        exercise_db.get_exercise_level(user.current_exercise_id)
+        if user.current_exercise_id
+        else user.current_level
+    )
+    return current_level or user.current_level
