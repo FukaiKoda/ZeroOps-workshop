@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     # Keep local development usable when no client/.env has been created yet.
     ZEROOPS_SERVER_URL: str = "http://localhost:8000"
+    ACTIVE_SECTION: str = "ci"
 
     # Legacy fields — kept for compatibility; USER_ID now comes from GitHub profile
     USER_ID: str = getpass.getuser()

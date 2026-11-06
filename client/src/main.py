@@ -1,5 +1,4 @@
 import typer
-import shutil
 from textual.app import App
 from utils.signals import setup_signal_handlers
 from utils.config import settings, load_token, clear_token
@@ -67,12 +66,6 @@ class ZeroOpsApp(App):
 @app.command()
 def tui():
     """Start the TUI."""
-    if settings.RENDU_DIR.exists():
-        try:
-            shutil.rmtree(settings.RENDU_DIR)
-        except Exception as e:
-            print(f"Warning: Failed to clean up {settings.RENDU_DIR}: {e}")
-
     settings.RENDU_DIR.mkdir(parents=True, exist_ok=True)
 
     tui_app = ZeroOpsApp()

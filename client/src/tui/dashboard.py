@@ -18,6 +18,7 @@ from textual.widgets import Button, Label, Header, Footer, Static, Markdown
 
 from api.client import ZeroOpsClient
 from utils.config import settings
+from utils.local_grader import run_local_grader
 
 from .modals import QuitScreen, SubmissionResultScreen
 from .leaderboard import Leaderboard
@@ -131,12 +132,28 @@ class Dashboard(Screen):
     Markdown {
         padding: 1;
     }
+
+    #sections {
+        height: 3;
+        align: center middle;
+        layout: horizontal;
+    }
+
+    #sections Button {
+        min-width: 16;
+        margin: 0 1;
+    }
     """
 
     def __init__(self):
         super().__init__()
         self.current_exercise: str | None = None
         self._last_commit_hash: str | None = None
+        self.section = (
+            settings.ACTIVE_SECTION
+            if settings.ACTIVE_SECTION in {"ci", "docker"}
+            else "ci"
+        )
 
     def on_markdown_link_clicked(self, event: Markdown.LinkClicked) -> None:
         if event.href:
@@ -172,6 +189,12 @@ class Dashboard(Screen):
             id="progress-bar",
         )
 
+        yield Container(
+            Button("CI", variant="primary", id="ci-section"),
+            Button("Docker", variant="default", id="docker-section"),
+            id="sections",
+        )
+
         # Exercise subject
         yield ScrollableContainer(
             Markdown("Loading...", id="subject-md"), id="subject"
@@ -201,10 +224,30 @@ class Dashboard(Screen):
                 await self.sync_repository()
             case "leaderboard":
                 self.app.push_screen(Leaderboard())
+            case "ci-section":
+                await self._switch_section("ci")
+            case "docker-section":
+                await self._switch_section("docker")
 
     # -----------------------------------------------------------------------
     # Status refresh
     # -----------------------------------------------------------------------
+
+    async def _switch_section(self, section: str) -> None:
+        if section == self.section:
+            return
+        self.section = section
+        settings.ACTIVE_SECTION = section
+        self._update_section_buttons()
+        await self.refresh_status()
+
+    def _update_section_buttons(self) -> None:
+        self.query_one("#ci-section", Button).variant = (
+            "primary" if self.section == "ci" else "default"
+        )
+        self.query_one("#docker-section", Button).variant = (
+            "primary" if self.section == "docker" else "default"
+        )
 
     async def refresh_status(self) -> None:
         """Fetch profile + status + exercise details and update all widgets."""
@@ -221,7 +264,7 @@ class Dashboard(Screen):
             self._update_identity(me)
 
             # Fetch exercise status
-            data = await client.get_status()
+            data = await client.get_status(self.section)
         except Exception as e:
             self.notify(f"Connection error: {e}", severity="error")
             await client.close()
@@ -234,6 +277,7 @@ class Dashboard(Screen):
             ex_id = data.get("current_exercise")
 
             self.query_one("#status-label", Static).update(f"Level: {level}")
+            self._update_section_buttons()
             self.current_exercise = ex_id
 
             if ex_id:
@@ -484,6 +528,32 @@ class Dashboard(Screen):
             return
         finally:
             await client.close()
+
+        if data.get("status") == "pending":
+            script_content = data.get("script_content")
+            nonce = data.get("nonce")
+            if not script_content or not nonce:
+                self.notify("Server did not return a local grading task.", severity="error")
+                return
+
+            self.notify("Running Docker checks locally...", severity="information")
+            try:
+                passed, logs = await run_local_grader(
+                    script_content, self.current_exercise
+                )
+            except Exception as e:
+                passed, logs = False, f"Local grader failed: {e}"
+
+            client = ZeroOpsClient()
+            try:
+                data = await client.verify_submission(
+                    nonce,
+                    passed,
+                    logs,
+                    commit_hash=self._last_commit_hash,
+                )
+            finally:
+                await client.close()
 
         is_success = data.get("status") == "success"
         message = data.get("message", "Unknown result")

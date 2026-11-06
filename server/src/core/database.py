@@ -7,7 +7,7 @@ User management has been moved to SQLite via SQLAlchemy (see core/db.py).
 import os
 from typing import Optional
 from pathlib import Path
-from ..models.exercise import ExerciseMetadata
+from ..models.exercise import ExerciseMetadata, ExerciseSection
 
 
 class ExerciseDatabase:
@@ -77,6 +77,28 @@ class ExerciseDatabase:
             for item in level_dir.iterdir()
             if item.is_dir() and item.name.startswith("ex")
         )
+
+    def get_exercise_level(self, ex_id: str) -> Optional[int]:
+        for level_dir in sorted(self.exercises_dir.iterdir()):
+            if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
+                continue
+            if (level_dir / ex_id).is_dir():
+                return int(level_dir.name.split("_")[1])
+        return None
+
+    def list_exercises_for_section(self, section: ExerciseSection) -> list[str]:
+        exercises: list[tuple[int, str]] = []
+        for level_dir in sorted(self.exercises_dir.iterdir()):
+            if not level_dir.is_dir() or not level_dir.name.startswith("level_"):
+                continue
+            level = int(level_dir.name.split("_")[1])
+            for exercise_dir in level_dir.iterdir():
+                if not exercise_dir.is_dir() or not exercise_dir.name.startswith("ex"):
+                    continue
+                meta = self.get_exercise_meta(level, exercise_dir.name)
+                if meta and meta.get_section() == section:
+                    exercises.append((level, exercise_dir.name))
+        return [exercise_id for _, exercise_id in sorted(exercises)]
 
     def level_exists(self, level: int) -> bool:
         return (self.exercises_dir / f"level_{level:02d}").exists()

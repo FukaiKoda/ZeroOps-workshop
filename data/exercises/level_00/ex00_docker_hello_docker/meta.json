@@ -1,0 +1,8 @@
+{
+  "id": "ex00_docker_hello_docker",
+  "title": "The Digital Hello",
+  "points": 10,
+  "requirements": [],
+  "type": "interactive",
+  "section": "docker"
+}

@@ -10,6 +10,7 @@ A technical workshop platform designed for the "ZeroOps" workshop. This system o
 ### Client (TUI)
 -   **Environment:** Runs centrally on the user's machine (where they have `docker` and `kubectl` access).
 -   **Interface:** A rich Terminal User Interface (TUI) built with `Textual`.
+-   **Workshop sections:** The dashboard switches independently between CI and Docker. Progress is derived per section, so a blocked exercise in one section does not prevent work in the other.
 -   **Execution Engine:** The client receives grading scripts (`check.py`) from the server and executes them **locally**. This allows the grading logic to inspect the user's actual system state (e.g., running containers, active pods) without requiring a complex remote sandbox.
 -   [Read more about the Client Architecture](CLIENT.md)
 
@@ -32,6 +33,8 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
     -   **Level 01 (K8s)**: Validates local YAML files AND performs system checks using `kubectl`.
 4.  **Verify**: Client sends the result + `nonce` to `POST /v1/verify`.
 5.  **Update**: Server validates the `nonce`, updates the user's score/level, and invalidates the nonce.
+
+The Docker section includes the first six Docker labs from the workshop repository. Their checkers run locally against the user's Docker daemon, while the server stores the pass/fail result and feedback.
 
 ## 3. Project Structure
 

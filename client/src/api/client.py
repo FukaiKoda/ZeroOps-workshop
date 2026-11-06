@@ -105,12 +105,14 @@ class ZeroOpsClient:
     # Exercises
     # -----------------------------------------------------------------------
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status(self, section: str = "ci") -> Dict[str, Any]:
         try:
             # Fetch profile to get user identity
             me = await self.get_me()
             username = me.get("github_username", settings.USER_ID)
-            response = await self.client.get(f"/v1/status/{username}")
+            response = await self.client.get(
+                f"/v1/status/{username}", params={"section": section}
+            )
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
@@ -144,6 +146,27 @@ class ZeroOpsClient:
             return response.json()
         except httpx.HTTPError:
             return []
+
+    async def verify_submission(
+        self,
+        nonce: str,
+        result: bool,
+        logs: str,
+        commit_hash: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload = {
+            "user_id": settings.USER_ID,
+            "nonce": nonce,
+            "result": result,
+            "logs": logs,
+            "commit_hash": commit_hash,
+        }
+        try:
+            response = await self.client.post("/v1/verify", json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            return {"status": "error", "message": str(e), "score": 0}
 
     async def submit_exercise(self, exercise_id: str, code: str = "", commit_hash: Optional[str] = None) -> Dict[str, Any]:
         payload = {

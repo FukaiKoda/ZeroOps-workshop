@@ -16,7 +16,7 @@ from ..core.rate_limit import limiter
 from ..core.github_repo import fetch_workflow_files, fetch_directory
 from ..models.db_user import User
 from ..models.db_submission import ExerciseSubmission
-from ..models.exercise import ExerciseState, ExerciseType
+from ..models.exercise import ExerciseSection, ExerciseState, ExerciseType
 from ..models.submission import (
     SubmissionRequest,
     SubmissionResponse,
@@ -40,6 +40,7 @@ class StatusResponse(BaseModel):
     github_username: str
     current_level: int
     current_exercise: Optional[str] = None
+    section: str = ExerciseSection.CI.value
     status: str = "ok"
     server_time: datetime
 
@@ -51,6 +52,7 @@ class ExerciseDetailsResponse(BaseModel):
     points: int
     subject: str
     type: ExerciseType = ExerciseType.DOCKER
+    section: str = ExerciseSection.DOCKER.value
 
 
 
@@ -76,22 +78,33 @@ async def get_status(
     user_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    section: str = ExerciseSection.CI.value,
 ):
     """
     Returns the current status of the authenticated user.
     `user_id` path param is kept for client compatibility but the identity
     comes from the JWT — students cannot query other users' status.
     """
-    current_exercise_id = await _find_current_exercise(db, current_user)
+    selected_section = _parse_section(section)
+    current_exercise_id = await _find_current_exercise(
+        db, current_user, selected_section
+    )
     if current_user.current_exercise_id != current_exercise_id:
         current_user.current_exercise_id = current_exercise_id
         await db.commit()
 
+    current_level = (
+        exercise_db.get_exercise_level(current_exercise_id)
+        if current_exercise_id
+        else current_user.current_level
+    )
+
     return StatusResponse(
         user_id=str(current_user.id),
         github_username=current_user.github_username,
-        current_level=current_user.current_level,
+        current_level=current_level or 0,
         current_exercise=current_exercise_id,
+        section=selected_section.value,
         server_time=datetime.now(),
     )
 
@@ -120,6 +133,7 @@ async def get_exercise(request: Request, exercise_id: str):
         points=meta.points,
         subject=details["subject"],
         type=getattr(meta, "type", "python"),
+        section=meta.get_section().value,
     )
 
 
@@ -165,7 +179,7 @@ async def submit_exercise(
     exercise_type = getattr(details["meta"], "type", None) if details else None
 
     # Server-side repository folder-scoped grading flow
-    if current_user.repository or exercise_type == ExerciseType.GITHUB_ACTIONS:
+    if exercise_type == ExerciseType.GITHUB_ACTIONS:
         return await grade_submission(
             db=db,
             current_user=current_user,
@@ -471,7 +485,18 @@ async def grade_submission(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-async def _find_current_exercise(db: AsyncSession, user: User) -> Optional[str]:
+def _parse_section(value: str) -> ExerciseSection:
+    try:
+        return ExerciseSection(value.lower())
+    except ValueError:
+        return ExerciseSection.CI
+
+
+async def _find_current_exercise(
+    db: AsyncSession,
+    user: User,
+    section: ExerciseSection = ExerciseSection.CI,
+) -> Optional[str]:
     """
     Find the first unsolved exercise for the user's current level.
     Falls back to the first exercise of the next level if all are solved.
@@ -485,12 +510,9 @@ async def _find_current_exercise(db: AsyncSession, user: User) -> Optional[str]:
     )
     passed_exercise_ids = set(result.scalars().all())
 
-    for level_offset in range(2):
-        level = user.current_level + level_offset
-        exercises = exercise_db.list_exercises_for_level(level)
-        for ex_id in exercises:
-            if ex_id not in passed_exercise_ids:
-                return ex_id
+    for ex_id in exercise_db.list_exercises_for_section(section):
+        if ex_id not in passed_exercise_ids:
+            return ex_id
 
     return None
 
@@ -522,22 +544,10 @@ async def _update_user_progress(
             if details:
                 user.total_xp += details["meta"].points
 
-        # Check if all exercises in the current level are now solved
-        exercises = exercise_db.list_exercises_for_level(user.current_level)
-        if exercises:
-            result = await db.execute(
-                select(ExerciseSubmission.exercise_id).where(
-                    ExerciseSubmission.user_id == user.id,
-                    ExerciseSubmission.status == "passed",
-                )
-            )
-            solved = set(result.scalars().all())
-            solved.add(exercise_id)  # include current
+    details = exercise_db.get_exercise_details(exercise_id)
+    section = details["meta"].get_section() if details else ExerciseSection.DOCKER
 
-            if all(ex in solved for ex in exercises):
-                if exercise_db.level_exists(user.current_level + 1):
-                    user.current_level += 1
-
-    # Persist updated active exercise in users table
-    user.current_exercise_id = await _find_current_exercise(db, user)
-    return user.current_level
+    # Keep a legacy cursor for older profile consumers, but calculate the next
+    # exercise from submissions in this section only.
+    user.current_exercise_id = await _find_current_exercise(db, user, section)
+    return exercise_db.get_exercise_level(user.current_exercise_id) or user.current_level
