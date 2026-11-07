@@ -1,0 +1,9 @@
+{
+  "id": "ex01_config",
+  "folder": "ex01_config",
+  "version": 1,
+  "title": "Teaching Git Who You Are",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}

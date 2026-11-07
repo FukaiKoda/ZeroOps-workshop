@@ -1,0 +1,9 @@
+{
+  "id": "ex05_remote_github",
+  "folder": "ex05_remote_github",
+  "version": 1,
+  "title": "Hello, Remote",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}

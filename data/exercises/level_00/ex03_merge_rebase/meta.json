@@ -1,0 +1,9 @@
+{
+  "id": "ex03_merge_rebase",
+  "folder": "ex03_merge_rebase",
+  "version": 1,
+  "title": "Bringing Branches Together",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}

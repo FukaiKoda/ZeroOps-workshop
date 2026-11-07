@@ -1,0 +1,9 @@
+{
+  "id": "ex06_gitignore",
+  "folder": "ex06_gitignore",
+  "version": 1,
+  "title": "The Bouncer",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}

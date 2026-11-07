@@ -1,0 +1,9 @@
+{
+  "id": "ex00_basic_workflow",
+  "folder": "ex00_basic_workflow",
+  "version": 1,
+  "title": "The Careful Commit",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}

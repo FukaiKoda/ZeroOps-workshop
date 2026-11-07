@@ -1,0 +1,9 @@
+{
+  "id": "ex04_reset",
+  "folder": "ex04_reset",
+  "version": 1,
+  "title": "Time Travel",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}

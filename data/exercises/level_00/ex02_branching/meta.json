@@ -1,0 +1,9 @@
+{
+  "id": "ex02_branching",
+  "folder": "ex02_branching",
+  "version": 1,
+  "title": "Parallel Universes",
+  "points": 10,
+  "requirements": ["git"],
+  "type": "git"
+}
