@@ -1,4 +1,17 @@
-"""Interactive Docker validation for ex04_docker_shared_folder."""
+"""Interactive Docker validation for ex04_docker_shared_folder.
+
+Goal:
+Validate understanding of bind mounts for development:
+- A host folder is mounted into an nginx container
+- Changes on the host are visible inside the running container
+
+We validate (in order):
+1) Docker availability
+2) Submission workspace exists and has site-content/index.html
+3) A suitable running nginx container exists (prefer name 'shared_site')
+4) The container has a *bind* mount to /usr/share/nginx/html
+5) The mounted index.html served path matches the host index.html content
+"""
 
 from __future__ import annotations
 
@@ -20,7 +33,14 @@ def _rendu_dir(exercise_path: Path) -> Path:
 
 def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
     try:
-        proc = subprocess.run(args, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        proc = subprocess.run(
+            args,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
     except subprocess.TimeoutExpired:
         return 124, "", "Command timed out"
@@ -29,8 +49,12 @@ def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
 
 
 def _docker_available() -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=10)
-    return (False, err or out or "Docker is not available") if code != 0 else (True, out)
+    code, out, err = _run_command(
+        ["docker", "info", "--format", "{{.ServerVersion}}"], timeout=10
+    )
+    if code != 0:
+        return False, err or out or "Docker is not available"
+    return True, out
 
 
 def _read_text(path: Path) -> Tuple[bool, str, str]:
@@ -52,21 +76,29 @@ def _inspect_json(args: list[str]) -> Tuple[bool, Optional[Dict[str, Any]], str]
             return True, data, ""
         return False, None, "Unexpected inspect output"
     except json.JSONDecodeError as e:
-        return False, None, f"Failed to parse Docker inspect output: {e}"
+        return False, None, f"Failed to parse JSON: {e}"
 
 
 def _container_running(name: str) -> bool:
-    code, out, _ = _run_command(["docker", "ps", "--filter", f"name=^{name}$", "--format", "{{.Names}}"])
-    return code == 0 and any(line.strip() == name for line in out.splitlines())
+    code, out, _ = _run_command(
+        ["docker", "ps", "--filter", f"name=^{name}$", "--format", "{{.Names}}"]
+    )
+    if code != 0:
+        return False
+    return any(line.strip() == name for line in out.splitlines())
 
 
 def _running_containers() -> Tuple[bool, list[Tuple[str, str]], str]:
+    """Return list of (id, name) for running containers."""
     code, out, err = _run_command(["docker", "ps", "--format", "{{.ID}} {{.Names}}"])
     if code != 0:
         return False, [], err or out or "Failed to list running containers"
-    containers = []
+    containers: list[Tuple[str, str]] = []
     for line in out.splitlines():
-        parts = line.strip().split(None, 1)
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.split(None, 1)
         if len(parts) == 2:
             containers.append((parts[0], parts[1]))
     return True, containers, ""
@@ -74,22 +106,42 @@ def _running_containers() -> Tuple[bool, list[Tuple[str, str]], str]:
 
 def _docker_exec_cat(name: str, path: str) -> Tuple[bool, str]:
     code, out, err = _run_command(["docker", "exec", name, "cat", path], timeout=10)
-    return (False, err or out) if code != 0 else (True, out)
+    if code != 0:
+        return False, err or out
+    return True, out
 
 
 def _normalize_text(text: str) -> str:
-    return "\n".join(line.rstrip() for line in text.replace("\r\n", "\n").split("\n")).strip()
+    return "\n".join(
+        line.rstrip() for line in text.replace("\r\n", "\n").split("\n")
+    ).strip()
 
 
 def _parse_docker_time(value: str) -> Optional[datetime]:
+    """Parse Docker's RFC3339-ish timestamps (often ending with 'Z')."""
     if not value:
         return None
     try:
         cleaned = value.strip()
         if cleaned.endswith("Z"):
             cleaned = cleaned[:-1] + "+00:00"
+        if "." in cleaned:
+            left, right = cleaned.split(".", 1)
+            if "+" in right:
+                frac, tz = right.split("+", 1)
+                frac = frac[:6]
+                cleaned = f"{left}.{frac}+{tz}"
+            elif "-" in right:
+                frac, tz = right.split("-", 1)
+                frac = frac[:6]
+                cleaned = f"{left}.{frac}-{tz}"
+            else:
+                cleaned = f"{left}.{right[:6]}"
+
         dt = datetime.fromisoformat(cleaned)
-        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
     except Exception:
         return None
 
@@ -98,31 +150,151 @@ def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     ok, info = _docker_available()
     if not ok:
         return False, f"Docker is not available for interactive validation: {info}"
+
     rendu_path = _rendu_dir(exercise_path)
-    host_index = rendu_path / HOST_FOLDER / HOST_INDEX
-    ok, host_content, _ = _read_text(host_index)
-    if not ok or not host_content.strip():
-        return False, "Validation failed: create a non-empty site-content/index.html first."
-    candidates = [(CONTAINER_NAME, CONTAINER_NAME)] if _container_running(CONTAINER_NAME) else _running_containers()[1]
-    expected_source = str((rendu_path / HOST_FOLDER).resolve())
-    selected = None
-    inspected = None
-    for container_id, container_name in candidates:
-        ok, data, _ = _inspect_json(["docker", "inspect", container_id])
-        if not ok or not data or "nginx" not in str(data.get("Config", {}).get("Image", "")).lower():
+    host_dir = rendu_path / HOST_FOLDER
+    host_index = host_dir / HOST_INDEX
+
+    ok, host_content, err = _read_text(host_index)
+    if not ok:
+        return False, (
+            "Validation failed:\n"
+            "- Missing host file: site-content/index.html\n"
+            "Create it first (any HTML is fine)."
+        )
+
+    if not host_content.strip():
+        return (
+            False,
+            f"Validation failed:\n- {host_index} is empty. Add some HTML content.",
+        )
+
+    candidate_ids: list[Tuple[str, str]] = []
+    if _container_running(CONTAINER_NAME):
+        candidate_ids.append((CONTAINER_NAME, CONTAINER_NAME))
+    else:
+        ok, running, err = _running_containers()
+        if not ok:
+            return False, f"Validation failed:\n- {err}"
+        candidate_ids.extend(running)
+
+    ok = False
+    inspect: Optional[Dict[str, Any]] = None
+    chosen_name_or_id: Optional[str] = None
+
+    expected_source = str(host_dir.resolve())
+
+    def _has_expected_bind_mount(
+        inspect_data: Dict[str, Any],
+    ) -> Tuple[bool, Optional[str]]:
+        mounts = inspect_data.get("Mounts", [])
+        if not isinstance(mounts, list):
+            return False, None
+
+        found_summary: Optional[str] = None
+        for m in mounts:
+            if not isinstance(m, dict):
+                continue
+            dest = str(m.get("Destination", ""))
+            if dest != MOUNT_DEST:
+                continue
+            m_type = str(m.get("Type", ""))
+            source = str(m.get("Source", ""))
+            found_summary = f"Type={m_type}, Source={source}, Destination={dest}"
+
+            if m_type != "bind":
+                continue
+
+            try:
+                if Path(source).resolve() == Path(expected_source):
+                    return True, found_summary
+            except Exception:
+                pass
+
+            if source.endswith(f"/{HOST_FOLDER}"):
+                return True, found_summary
+
+        return False, found_summary
+
+    last_mount_summary: Optional[str] = None
+    last_image: Optional[str] = None
+
+    for container_id, container_name in candidate_ids:
+        ok_i, inspect_i, err_i = _inspect_json(["docker", "inspect", container_id])
+        if not ok_i or not inspect_i:
             continue
-        for mount in data.get("Mounts", []):
-            if (mount.get("Type") == "bind" and mount.get("Destination") == MOUNT_DEST and (Path(str(mount.get("Source"))).resolve() == Path(expected_source) or str(mount.get("Source", "")).endswith(f"/{HOST_FOLDER}"))):
-                selected, inspected = container_name, data
-                break
-        if selected:
-            break
-    if not selected or not inspected:
-        return False, "Validation failed: no running Nginx container has the required bind mount."
-    started_at = _parse_docker_time(str(inspected.get("State", {}).get("StartedAt", "")))
-    if not started_at or datetime.fromtimestamp(host_index.stat().st_mtime, tz=timezone.utc) <= started_at:
-        return False, "Edit site-content/index.html after starting the container, then submit again."
-    ok, container_content = _docker_exec_cat(selected, f"{MOUNT_DEST}/{HOST_INDEX}")
-    if not ok or _normalize_text(container_content) != _normalize_text(host_content):
-        return False, "The mounted index.html does not match the host file."
-    return True, f"Great! The bind mount is live and validated in {selected}."
+
+        image = str(inspect_i.get("Config", {}).get("Image", ""))
+        last_image = image
+        if "nginx" not in image.lower():
+            continue
+
+        mount_ok, summary = _has_expected_bind_mount(inspect_i)
+        if summary:
+            last_mount_summary = summary
+        if not mount_ok:
+            continue
+
+        ok = True
+        inspect = inspect_i
+        chosen_name_or_id = container_name or container_id
+        break
+
+    if not ok or not inspect or not chosen_name_or_id:
+        details = ""
+        if last_image:
+            details += f"\n- Last inspected image: {last_image}"
+        if last_mount_summary:
+            details += f"\n- Last mount seen: {last_mount_summary}"
+        return False, (
+            "Validation failed:\n"
+            "- No running nginx container found with the required bind mount.\n"
+        )
+
+    started_at_raw = str(inspect.get("State", {}).get("StartedAt", ""))
+    started_at = _parse_docker_time(started_at_raw)
+    if not started_at:
+        return False, (
+            "Validation failed:\n"
+            f"- Could not parse container start time (StartedAt='{started_at_raw}')."
+        )
+
+    try:
+        host_mtime = datetime.fromtimestamp(host_index.stat().st_mtime, tz=timezone.utc)
+    except Exception as e:
+        return (
+            False,
+            f"Validation failed:\n- Could not read mtime for {host_index}: {e}",
+        )
+
+    if host_mtime <= started_at:
+        return False, (
+            "Validation failed:\n"
+            "- Your host index.html does not appear to have been edited AFTER the container started.\n"
+            "This lab requires proving live updates via a bind mount.\n"
+            "Fix:\n"
+            "  1) Start the container with the bind mount\n"
+            "  2) Edit and save site-content/index.html\n"
+            "  3) Submit again"
+        )
+
+    ok, container_content = _docker_exec_cat(
+        chosen_name_or_id, f"{MOUNT_DEST}/{HOST_INDEX}"
+    )
+    if not ok:
+        return False, (
+            "Validation failed:\n"
+            f"- Could not read {MOUNT_DEST}/{HOST_INDEX} inside the container: {container_content}"
+        )
+
+    if _normalize_text(container_content) != _normalize_text(host_content):
+        return False, (
+            "Validation failed:\n"
+            "- The container's /usr/share/nginx/html/index.html does not match your host site-content/index.html.\n"
+            "This usually means the folder is not mounted correctly (or you mounted the wrong path)."
+        )
+
+    return (
+        True,
+        f"✅ Great! Your bind mount is correct and you edited the file after start (container: {chosen_name_or_id}).",
+    )

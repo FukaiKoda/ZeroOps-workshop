@@ -19,10 +19,12 @@ DEFAULT_INDEX_HTML = """<!DOCTYPE html>
 
 
 def _rendu_dir(exercise_path: Path) -> Path:
+    """Get the user's submission directory."""
     return Path.home() / "rendudevops" / exercise_path.name
 
 
 def _ensure_index_html(rendu_path: Path) -> None:
+    """Auto-create index.html if it doesn't exist."""
     index_path = rendu_path / "index.html"
     if not index_path.exists():
         try:
@@ -33,8 +35,16 @@ def _ensure_index_html(rendu_path: Path) -> None:
 
 
 def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
+    """Run a shell command and return (exit_code, stdout, stderr)."""
     try:
-        proc = subprocess.run(args, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        proc = subprocess.run(
+            args,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
     except subprocess.TimeoutExpired:
         return 124, "", "Command timed out"
@@ -43,6 +53,7 @@ def _run_command(args: list[str], timeout: int = 30) -> Tuple[int, str, str]:
 
 
 def _docker_available() -> Tuple[bool, str]:
+    """Check if Docker daemon is available."""
     code, out, err = _run_command(["docker", "info", "--format", "{{.ServerVersion}}"])
     if code != 0:
         return False, err or out or "Docker is not available"
@@ -50,96 +61,213 @@ def _docker_available() -> Tuple[bool, str]:
 
 
 def _image_exists(image: str) -> bool:
+    """Check if a Docker image exists locally."""
     code, _, _ = _run_command(["docker", "image", "inspect", image])
     return code == 0
 
 
 def _inspect_image(image: str) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    """Inspect a Docker image and return its configuration."""
     code, out, err = _run_command(["docker", "image", "inspect", image])
     if code != 0:
         return False, None, err or "Image not found"
     try:
         data = json.loads(out)
-        return (True, data[0], "") if data else (False, None, "Empty inspection result")
+        if data and len(data) > 0:
+            return True, data[0], ""
+        return False, None, "Empty inspection result"
     except json.JSONDecodeError as e:
-        return False, None, f"Failed to parse inspection: {e}"
+        return False, None, f"Failed to parse image inspection: {e}"
 
 
 def _get_image_history(image: str) -> Tuple[bool, list, str]:
-    code, out, err = _run_command(["docker", "history", image, "--format", "{{.CreatedBy}}", "--no-trunc"])
+    """Get the layer history of a Docker image."""
+    code, out, err = _run_command(
+        ["docker", "history", image, "--format", "{{.CreatedBy}}", "--no-trunc"]
+    )
     if code != 0:
         return False, [], err or "Failed to get image history"
-    return True, [line.strip() for line in out.splitlines() if line.strip()], ""
+    layers = [line.strip() for line in out.splitlines() if line.strip()]
+    return True, layers, ""
 
 
 def _validate_dockerfile(dockerfile_path: Path) -> Tuple[bool, list[str]]:
+    """Validate the Dockerfile content and return list of errors."""
+    errors = []
+
     if not dockerfile_path.exists():
         return False, ["Dockerfile not found"]
+
     try:
-        instructions = [line.strip() for line in dockerfile_path.read_text().splitlines() if line.strip() and not line.strip().startswith("#")]
+        content = dockerfile_path.read_text()
     except Exception as e:
         return False, [f"Could not read Dockerfile: {e}"]
-    errors = []
-    from_lines = [line for line in instructions if line.upper().startswith("FROM")]
-    if not from_lines:
+
+    lines = content.strip().splitlines()
+
+    instructions = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            instructions.append(stripped)
+
+    if not instructions:
+        return False, ["Dockerfile is empty"]
+
+    from_found = False
+    for inst in instructions:
+        if inst.upper().startswith("FROM"):
+            from_found = True
+            if "nginx:alpine" not in inst.lower():
+                errors.append(
+                    "FROM instruction should use 'nginx:alpine' as the base image"
+                )
+            break
+
+    if not from_found:
         errors.append("Missing FROM instruction")
-    elif "nginx:alpine" not in from_lines[0].lower():
-        errors.append("FROM instruction should use 'nginx:alpine'")
-    copy_lines = [line for line in instructions if line.upper().startswith("COPY")]
-    if not copy_lines:
+
+    copy_found = False
+    copy_correct = False
+    for inst in instructions:
+        if inst.upper().startswith("COPY"):
+            copy_found = True
+            if "index.html" in inst and "/usr/share/nginx/html" in inst:
+                copy_correct = True
+            break
+
+    if not copy_found:
         errors.append("Missing COPY instruction")
-    elif "index.html" not in copy_lines[0] or "/usr/share/nginx/html" not in copy_lines[0]:
-        errors.append("COPY must copy index.html to /usr/share/nginx/html/")
-    expose_lines = [line for line in instructions if line.upper().startswith("EXPOSE")]
-    if not expose_lines:
+    elif not copy_correct:
+        errors.append(
+            "COPY instruction should copy index.html to /usr/share/nginx/html/"
+        )
+
+    expose_found = False
+    expose_80 = False
+    for inst in instructions:
+        if inst.upper().startswith("EXPOSE"):
+            expose_found = True
+            if "80" in inst:
+                expose_80 = True
+            break
+
+    if not expose_found:
         errors.append("Missing EXPOSE instruction")
-    elif "80" not in expose_lines[0]:
-        errors.append("EXPOSE must document port 80")
-    return not errors, errors
+    elif not expose_80:
+        errors.append("EXPOSE instruction should document port 80")
+
+    for inst in instructions:
+        if inst.upper().startswith("CMD"):
+            break
+
+    return len(errors) == 0, errors
 
 
 def _validate_index_html(index_path: Path) -> Tuple[bool, list[str]]:
+    """Validate that index.html exists and has content."""
+    errors = []
+
     if not index_path.exists():
-        return False, ["index.html not found (it is created automatically)"]
+        return False, ["index.html not found (should have been auto-created)"]
+
     try:
-        return (True, []) if index_path.read_text().strip() else (False, ["index.html is empty"])
+        content = index_path.read_text()
+        if not content.strip():
+            errors.append("index.html is empty")
     except Exception as e:
         return False, [f"Could not read index.html: {e}"]
 
+    return len(errors) == 0, errors
+
 
 def _validate_built_image() -> Tuple[bool, list[str]]:
-    image_tag = "web-artifact:v1"
-    if not _image_exists(image_tag):
-        return False, [f"Image '{image_tag}' not found. Did you build it?"]
-    ok, config, err = _inspect_image(image_tag)
-    if not ok or not config:
-        return False, [f"Could not inspect image: {err}"]
+    """Validate that web-artifact:v1 image is built correctly."""
     errors = []
-    if "80/tcp" not in config.get("Config", {}).get("ExposedPorts", {}):
-        errors.append("Image should expose port 80")
+    image_tag = "web-artifact:v1"
+
+    if not _image_exists(image_tag):
+        return False, [f"Image '{image_tag}' not found. Did you build it"]
+
+    ok, config, err = _inspect_image(image_tag)
+    if not ok:
+        errors.append(f"Could not inspect image: {err}")
+        return False, errors
+
+    exposed_ports = config.get("Config", {}).get("ExposedPorts", {})
+    if "80/tcp" not in exposed_ports:
+        errors.append("Image should have port 80 exposed (EXPOSE 80)")
+
     ok, history, err = _get_image_history(image_tag)
-    if ok and not any("COPY" in layer.upper() and "index.html" in layer for layer in history):
-        errors.append("Image history does not show a COPY layer for index.html")
-    return not errors, errors
+    if ok:
+        copy_layer_found = False
+        for layer in history:
+            if "COPY" in layer.upper() and "index.html" in layer:
+                copy_layer_found = True
+                break
+        if not copy_layer_found:
+            errors.append("Image history doesn't show a COPY layer for index.html")
+
+    return len(errors) == 0, errors
 
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
+    """
+    Grade ex03_docker_the_blueprint.
+
+    Validates:
+    1. Dockerfile exists with correct instructions
+    2. index.html exists
+    3. Image web-artifact:v1 is built
+    4. Image has correct configuration
+    """
+    all_errors = []
+    warnings = []
+
     ok, info = _docker_available()
     if not ok:
         return False, f"Docker is not available: {info}"
+
     rendu_path = _rendu_dir(exercise_path)
-    rendu_path.mkdir(parents=True, exist_ok=True)
+
+    if not rendu_path.exists():
+        try:
+            rendu_path.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            all_errors.append(f"Could not create submission directory: {e}")
+            return False, "Validation failed:\n- " + "\n- ".join(all_errors)
+
     _ensure_index_html(rendu_path)
-    errors = []
-    valid, messages = _validate_dockerfile(rendu_path / "Dockerfile")
-    if not valid:
-        errors.extend(messages)
-    valid, messages = _validate_index_html(rendu_path / "index.html")
-    if not valid:
-        errors.extend(messages)
-    valid, messages = _validate_built_image()
-    if not valid:
-        errors.extend(messages)
-    if errors:
-        return False, "Validation failed:\n- " + "\n- ".join(errors)
-    return True, "Excellent work! The versioned web artifact is ready for deployment."
+
+    dockerfile_path = rendu_path / "Dockerfile"
+    index_path = rendu_path / "index.html"
+
+    df_ok, df_errors = _validate_dockerfile(dockerfile_path)
+    if not df_ok:
+        all_errors.extend(df_errors)
+
+    idx_ok, idx_errors = _validate_index_html(index_path)
+    if not idx_ok:
+        all_errors.extend(idx_errors)
+
+    img_ok, img_errors = _validate_built_image()
+    if not img_ok:
+        all_errors.extend(img_errors)
+
+    if all_errors:
+        error_msg = "Validation failed:\n- " + "\n- ".join(all_errors)
+        if warnings:
+            error_msg += "\n\nWarnings:\n- " + "\n- ".join(warnings)
+        return False, error_msg
+
+    success_msg = """✅ Excellent work! Your Dockerfile is correct!
+
+You've successfully:
+• Created a Dockerfile with nginx:alpine base
+• Copied index.html to the correct nginx directory
+• Documented port 80 with EXPOSE
+• Built the image as web-artifact:v1
+
+Your custom web artifact is ready for deployment! 🚀"""
+
+    return True, success_msg

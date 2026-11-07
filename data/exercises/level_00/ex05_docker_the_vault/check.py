@@ -1,4 +1,19 @@
-"""Interactive Docker validation for ex05_docker_the_vault."""
+"""Interactive Docker validation for ex06_docker_the_vualt (The Vault).
+
+This grader validates ONLY what the subject requires and what can be checked
+at submission time in a deterministic way.
+
+Expected submission state (per subject):
+- A named volume exists: grademe-db-data
+- The original container grademe-db has been removed
+- A new container exists and is running: grademe-db-new
+- grademe-db-new mounts the named volume to /var/lib/postgresql/data
+- Querying the database shows the seeded data still exists (COUNT(*) == 3)
+
+Contract:
+    grade(grader, code, exercise_path) -> (success: bool, message: str)
+
+"""
 
 from __future__ import annotations
 
@@ -29,10 +44,12 @@ INSERT INTO submissions (student_name, grade) VALUES
 
 
 def _rendu_dir(exercise_path: Path) -> Path:
+    """Return the user's submission directory for this exercise."""
     return Path.home() / "rendudevops" / exercise_path.name
 
 
 def _ensure_init_sql(exercise_path: Path) -> None:
+    """Create init.sql in the user's exercise directory if it doesn't exist."""
     rendu = _rendu_dir(exercise_path)
     rendu.mkdir(parents=True, exist_ok=True)
     init_sql = rendu / "init.sql"
@@ -41,12 +58,20 @@ def _ensure_init_sql(exercise_path: Path) -> None:
 
 
 def setup(exercise_path: Path) -> None:
+    """Setup function called when entering the exercise. Creates required files."""
     _ensure_init_sql(exercise_path)
 
 
 def _run_command(args: list[str], timeout: int = 10) -> Tuple[int, str, str]:
     try:
-        proc = subprocess.run(args, check=False, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout)
+        proc = subprocess.run(
+            args,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=timeout,
+        )
         return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
     except subprocess.TimeoutExpired:
         return 124, "", "Command timed out"
@@ -55,22 +80,34 @@ def _run_command(args: list[str], timeout: int = 10) -> Tuple[int, str, str]:
 
 
 def _docker_available() -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=5)
-    return (False, err or out or "Docker is not available") if code != 0 else (True, out)
+    code, out, err = _run_command(
+        ["docker", "info", "--format", "{{.ServerVersion}}"], timeout=5
+    )
+    if code != 0:
+        return False, err or out or "Docker is not available"
+    return True, out
 
 
-def _volume_exists(name: str) -> bool:
-    code, _, _ = _run_command(["docker", "volume", "inspect", name], timeout=10)
-    return code == 0
+def _volume_exists(name: str) -> Tuple[bool, str]:
+    code, out, err = _run_command(["docker", "volume", "inspect", name], timeout=10)
+    if code != 0:
+        return False, err or out or "volume inspect failed"
+    return True, ""
 
 
 def _container_exists(name: str) -> bool:
-    code, out, _ = _run_command(["docker", "ps", "-a", "--filter", f"name=^/{name}$", "--format", "{{.ID}}"], timeout=10)
+    code, out, _ = _run_command(
+        ["docker", "ps", "-a", "--filter", f"name=^/{name}$", "--format", "{{.ID}}"],
+        timeout=10,
+    )
     return code == 0 and bool(out.strip())
 
 
 def _container_running(name: str) -> bool:
-    code, out, _ = _run_command(["docker", "ps", "--filter", f"name=^/{name}$", "--format", "{{.ID}}"], timeout=10)
+    code, out, _ = _run_command(
+        ["docker", "ps", "--filter", f"name=^/{name}$", "--format", "{{.ID}}"],
+        timeout=10,
+    )
     return code == 0 and bool(out.strip())
 
 
@@ -80,50 +117,119 @@ def _inspect_container(name: str) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         return False, None, err or out or "inspect failed"
     try:
         data = json.loads(out)
-        return (True, data[0], "") if isinstance(data, list) and data else (False, None, "Unexpected inspect output")
+        if isinstance(data, list) and data:
+            return True, data[0], ""
+        return False, None, "Unexpected inspect output"
     except json.JSONDecodeError as e:
-        return False, None, f"Failed to parse Docker inspect output: {e}"
+        return False, None, f"Failed to parse docker inspect JSON: {e}"
 
 
-def _has_named_volume_mount(inspected: Dict[str, Any]) -> bool:
-    return any(m.get("Type") == "volume" and m.get("Name") == VOLUME_NAME and m.get("Destination") == MOUNT_DEST for m in inspected.get("Mounts", []))
+def _has_named_volume_mount(
+    inspected: Dict[str, Any], volume_name: str, dest: str
+) -> Tuple[bool, str]:
+    mounts = inspected.get("Mounts", [])
+    if not isinstance(mounts, list):
+        return False, "Could not read container mounts"
+
+    for m in mounts:
+        if not isinstance(m, dict):
+            continue
+        if m.get("Type") != "volume":
+            continue
+        if m.get("Name") != volume_name:
+            continue
+        if m.get("Destination") != dest:
+            continue
+        return True, ""
+
+    return (
+        False,
+        f"Container must mount named volume '{volume_name}' to '{dest}'.",
+    )
 
 
 def _exec_psql_count(container: str) -> Tuple[bool, str]:
-    code, out, err = _run_command(["docker", "exec", container, "psql", "-U", "postgres", "-d", DB_NAME, "-t", "-A", "-c", "SELECT COUNT(*) FROM submissions;"], timeout=10)
+    cmd = "SELECT COUNT(*) FROM submissions;"
+    code, out, err = _run_command(
+        [
+            "docker",
+            "exec",
+            container,
+            "psql",
+            "-U",
+            "postgres",
+            "-d",
+            DB_NAME,
+            "-t",
+            "-A",
+            "-c",
+            cmd,
+        ],
+        timeout=10,
+    )
     if code != 0:
         return False, err or out or "psql query failed"
+
+    value = out.strip()
+    if not value:
+        return False, "psql returned empty output"
+
     try:
-        count = int(out.strip().splitlines()[-1])
-    except (ValueError, IndexError):
-        return False, f"Unexpected COUNT(*) output: {out!r}"
-    return (True, "") if count == EXPECTED_COUNT else (False, f"Expected {EXPECTED_COUNT} rows, found {count}.")
+        count = int(value.splitlines()[-1].strip())
+    except ValueError:
+        return False, f"Unexpected COUNT(*) output: {value!r}"
+
+    if count != EXPECTED_COUNT:
+        return False, f"Expected {EXPECTED_COUNT} rows in submissions, found {count}."
+
+    return True, ""
 
 
 def grade(code: str, exercise_path: Path) -> Tuple[bool, str]:
     _ensure_init_sql(exercise_path)
+
+    errors: list[str] = []
+
     ok, info = _docker_available()
     if not ok:
         return False, f"Docker is not available for interactive validation: {info}"
-    errors = []
-    if not _volume_exists(VOLUME_NAME):
+
+    ok, err = _volume_exists(VOLUME_NAME)
+    if not ok:
         errors.append(f"Named volume '{VOLUME_NAME}' not found.")
+
     if _container_exists(OLD_CONTAINER):
-        errors.append(f"Container '{OLD_CONTAINER}' still exists.")
+        errors.append(
+            f"Container '{OLD_CONTAINER}' still exists. Remove it to prove resurrection"
+        )
+
     if not _container_exists(NEW_CONTAINER):
-        errors.append(f"Container '{NEW_CONTAINER}' not found.")
+        errors.append(
+            f"Container '{NEW_CONTAINER}' not found. Create it from postgres:15-alpine with the volume mounted."
+        )
     elif not _container_running(NEW_CONTAINER):
         errors.append(f"Container '{NEW_CONTAINER}' exists but is not running.")
     else:
-        ok, inspected, inspect_error = _inspect_container(NEW_CONTAINER)
+        ok, inspected, inspect_err = _inspect_container(NEW_CONTAINER)
         if not ok or not inspected:
-            errors.append(inspect_error)
-        elif not _has_named_volume_mount(inspected):
-            errors.append(f"Container must mount '{VOLUME_NAME}' at '{MOUNT_DEST}'.")
+            errors.append(f"Could not inspect '{NEW_CONTAINER}': {inspect_err}")
         else:
-            ok, query_error = _exec_psql_count(NEW_CONTAINER)
+            ok, mount_err = _has_named_volume_mount(inspected, VOLUME_NAME, MOUNT_DEST)
             if not ok:
-                errors.append(query_error)
+                errors.append(mount_err)
+            else:
+                ok, qerr = _exec_psql_count(NEW_CONTAINER)
+                if not ok:
+                    errors.append(
+                        "Could not verify data persistence via SQL query. "
+                        "Make sure the data was properly seeded in the original container "
+                        f"and you are using POSTGRES_DB={DB_NAME}. Details: {qerr}"
+                    )
+
     if errors:
         return False, "Validation failed:\n- " + "\n- ".join(errors)
-    return True, "Vault confirmed: the named volume preserved all three rows."
+
+    return True, (
+        "✅ Vault confirmed! The named volume exists, the original container is gone, and the new container "
+        "still contains the 3 seeded rows (data persisted across container destruction)."
+    )
