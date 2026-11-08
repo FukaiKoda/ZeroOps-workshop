@@ -19,15 +19,16 @@ def _headers(token: str) -> dict:
     }
 
 
+def _public_headers() -> dict:
+    return {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+
 async def verify_repo_exists(owner: str, repo: str, token: str) -> bool:
     """Check that a repository exists and is accessible with the given token."""
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{GITHUB_API_BASE}/repos/{owner}/{repo}",
-            headers=_headers(token),
-            timeout=10.0,
-        )
-        return response.status_code == 200
+    return await get_repo_info(owner, repo, token) is not None
 
 
 async def get_repo_info(owner: str, repo: str, token: str) -> Optional[dict]:
@@ -35,14 +36,19 @@ async def get_repo_info(owner: str, repo: str, token: str) -> Optional[dict]:
     Fetch repository metadata.
     Returns a dict with: full_name, default_branch, private, owner.login, etc.
     """
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}"
     async with httpx.AsyncClient() as client:
-        response = await client.get(
-            f"{GITHUB_API_BASE}/repos/{owner}/{repo}",
-            headers=_headers(token),
-            timeout=10.0,
-        )
+        response = await client.get(url, headers=_headers(token), timeout=10.0)
         if response.status_code == 200:
             return response.json()
+
+        # Public repository metadata does not require OAuth. This also keeps
+        # public repositories linkable when an old OAuth token is rejected.
+        if response.status_code in {401, 403, 404}:
+            response = await client.get(url, headers=_public_headers(), timeout=10.0)
+            if response.status_code == 200:
+                return response.json()
+
         return None
 
 

@@ -60,6 +60,39 @@ def create_state_token() -> str:
     return state
 
 
+def update_state(state: str, **values: object) -> bool:
+    """Attach provider data to a still-pending OAuth state."""
+    states = _load_states()
+    entry = states.get(state)
+    if not entry or entry.get("status") != "pending":
+        return False
+    try:
+        created_at = datetime.fromisoformat(entry["created_at"])
+    except Exception:
+        return False
+    if (datetime.now(timezone.utc) - created_at).total_seconds() > settings.AUTH_STATE_TTL_SECONDS:
+        entry["status"] = "expired"
+        _save_states(states)
+        return False
+    entry.update(values)
+    _save_states(states)
+    return True
+
+
+def get_state(state: str) -> Optional[dict]:
+    """Return a pending OAuth state without consuming it."""
+    entry = _load_states().get(state)
+    if not entry or entry.get("status") != "pending":
+        return None
+    try:
+        created_at = datetime.fromisoformat(entry["created_at"])
+    except Exception:
+        return None
+    if (datetime.now(timezone.utc) - created_at).total_seconds() > settings.AUTH_STATE_TTL_SECONDS:
+        return None
+    return entry
+
+
 def complete_state(state: str, session_token: str) -> bool:
     """
     Mark a state token as complete and attach the session token.

@@ -90,8 +90,8 @@ class LoginScreen(Screen):
         yield Header()
         yield Container(
             Label("⚡ ZeroOps Workshop", classes="title"),
-            Label("Sign in with your GitHub account to continue.", classes="subtitle"),
-            Button("  Login with GitHub", variant="primary", id="github-btn"),
+            Label("Authenticate with 42 Intra, then authorize GitHub to track your progress.", classes="subtitle"),
+            Button("  Login with 42 Intra", variant="primary", id="github-btn"),
             Label("", id="status-label"),
             LoadingIndicator(id="loading-indicator"),
             Button("Cancel", variant="default", id="cancel-btn"),
@@ -174,7 +174,7 @@ class LoginScreen(Screen):
 
         # Show waiting UI
         self.query_one("#status-label", Label).update(
-            "Browser opened. Waiting for GitHub authorization..."
+            "Browser opened. Complete Intra, then GitHub authorization..."
         )
         self.query_one("#loading-indicator", LoadingIndicator).styles.display = "block"
         self.query_one("#cancel-btn", Button).styles.display = "block"

@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     GITHUB_CLIENT_SECRET: str = ""
     GITHUB_REDIRECT_URI: str = "http://localhost:8000/v1/auth/callback"
 
+    # 42 Intra OAuth App credentials
+    INTRA_CLIENT_ID: str = ""
+    INTRA_CLIENT_SECRET: str = ""
+    INTRA_REDIRECT_URI: str = "http://localhost:8000/v1/auth/intra/callback"
+
     # Secret key for JWT signing and state tokens
     # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
     SECRET_KEY: str = secrets.token_hex(32)

@@ -12,6 +12,9 @@ from .config import settings
 GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_BASE = "https://api.github.com"
+INTRA_AUTHORIZE_URL = "https://api.intra.42.fr/oauth/authorize"
+INTRA_TOKEN_URL = "https://api.intra.42.fr/oauth/token"
+INTRA_API_BASE = "https://api.intra.42.fr/v2"
 
 # Scopes: read user info, read emails, and repo access for ownership verification
 OAUTH_SCOPES = "read:user user:email repo"
@@ -31,6 +34,20 @@ def build_auth_url(state: str, redirect_uri: Optional[str] = None) -> str:
         "state": state,
     })
     return f"{GITHUB_AUTHORIZE_URL}?{params}"
+
+
+def build_intra_auth_url(state: str, redirect_uri: Optional[str] = None) -> str:
+    """Build the 42 Intra OAuth authorization URL."""
+    if not redirect_uri:
+        redirect_uri = settings.INTRA_REDIRECT_URI
+    params = urlencode({
+        "client_id": settings.INTRA_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "public",
+        "state": state,
+    })
+    return f"{INTRA_AUTHORIZE_URL}?{params}"
 
 
 async def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None) -> Optional[str]:
@@ -56,6 +73,27 @@ async def exchange_code_for_token(code: str, redirect_uri: Optional[str] = None)
         return data.get("access_token")
 
 
+async def exchange_intra_code_for_token(code: str, redirect_uri: Optional[str] = None) -> Optional[str]:
+    """Exchange a 42 Intra authorization code for an access token."""
+    if not redirect_uri:
+        redirect_uri = settings.INTRA_REDIRECT_URI
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            INTRA_TOKEN_URL,
+            data={
+                "grant_type": "authorization_code",
+                "client_id": settings.INTRA_CLIENT_ID,
+                "client_secret": settings.INTRA_CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": redirect_uri,
+            },
+            timeout=10.0,
+        )
+        if response.status_code >= 400:
+            return None
+        return response.json().get("access_token")
+
+
 async def get_github_user(token: str) -> Optional[dict]:
     """
     Fetch the authenticated user's GitHub profile.
@@ -69,6 +107,19 @@ async def get_github_user(token: str) -> Optional[dict]:
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
             },
+            timeout=10.0,
+        )
+        if response.status_code == 200:
+            return response.json()
+        return None
+
+
+async def get_intra_user(token: str) -> Optional[dict]:
+    """Fetch the authenticated 42 Intra user's public profile."""
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{INTRA_API_BASE}/me",
+            headers={"Authorization": f"Bearer {token}"},
             timeout=10.0,
         )
         if response.status_code == 200:
