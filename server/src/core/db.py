@@ -5,6 +5,7 @@ All ORM models import `Base` from here.
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import text
 from .config import settings
 
 
@@ -45,3 +46,11 @@ async def create_tables() -> None:
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if settings.DATABASE_URL.startswith("sqlite"):
+            columns = (await conn.execute(text("PRAGMA table_info(users)"))).all()
+            existing = {row[1] for row in columns}
+            if "intra_id" not in existing:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN intra_id INTEGER"))
+            if "intra_login" not in existing:
+                await conn.execute(text("ALTER TABLE users ADD COLUMN intra_login VARCHAR(255)"))
+            await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_intra_id ON users (intra_id)"))

@@ -17,6 +17,10 @@ class User(Base):
     github_avatar: Mapped[str] = mapped_column(String(512), nullable=True, default="")
     github_email: Mapped[str] = mapped_column(String(255), nullable=True)
 
+    # 42 Intra identity used to identify workshop students
+    intra_id: Mapped[int | None] = mapped_column(Integer, unique=True, index=True, nullable=True)
+    intra_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
     # Stored OAuth token — used for GitHub API calls on behalf of the user.
     # In production this should be encrypted at rest.
     access_token: Mapped[str] = mapped_column(String(512), nullable=False)

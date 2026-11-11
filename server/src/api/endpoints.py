@@ -295,6 +295,7 @@ async def verify_submission(
 class LeaderboardEntry(BaseModel):
     user_id: str
     github_username: str
+    intra_login: str | None = None
     level: int
     total_xp: int
 
@@ -311,6 +312,7 @@ async def get_leaderboard(request: Request, db: AsyncSession = Depends(get_db)):
         LeaderboardEntry(
             user_id=str(u.id),
             github_username=u.github_username,
+            intra_login=u.intra_login,
             level=u.current_level,
             total_xp=u.total_xp,
         )

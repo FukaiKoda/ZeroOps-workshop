@@ -1,22 +1,39 @@
 """
-GitHub OAuth authentication endpoints.
+GitHub & 42 Intra OAuth authentication endpoints.
 
 Flow:
-  1. GET  /v1/auth/login        → returns {auth_url, state}; client opens browser
-  2. GET  /v1/auth/callback     → GitHub redirects here; server exchanges code, upserts user
-  3. GET  /v1/auth/poll/{state} → client polls until status == "complete"
-  4. GET  /v1/auth/me           → client fetches own profile using JWT
+    1. GET  /v1/auth/login        → returns a 42 Intra URL and state; client opens browser
+    2. GET  /v1/auth/intra/callback → stores Intra identity and redirects to GitHub
+    3. GET  /v1/auth/callback     → GitHub callback links both identities and completes login
+    4. GET  /v1/auth/poll/{state} → client polls until status == "complete"
+    5. GET  /v1/auth/me           → client fetches own profile using JWT
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..core.config import settings
 from ..core.db import get_db
-from ..core.oauth import build_auth_url, exchange_code_for_token, get_github_user, get_github_primary_email
-from ..core.session import create_state_token, complete_state, poll_state, create_session_token, verify_session_token
+from ..core.oauth import (
+    build_auth_url,
+    build_intra_auth_url,
+    exchange_code_for_token,
+    exchange_intra_code_for_token,
+    get_github_user,
+    get_github_primary_email,
+    get_intra_user,
+)
+from ..core.session import (
+    create_state_token,
+    complete_state,
+    get_state,
+    poll_state,
+    update_state,
+    create_session_token,
+    verify_session_token,
+)
 from ..core.rate_limit import limiter
 from ..models.db_user import User
 from ..models.auth import LoginInitResponse, PollResponse, UserProfileResponse, RepositoryInfo
@@ -52,37 +69,74 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
 
 
 # ---------------------------------------------------------------------------
-# Step 1: Initiate login
+# Step 1: Initiate login (42 Intra)
 # ---------------------------------------------------------------------------
 
 @router.get("/login", response_model=LoginInitResponse)
 @limiter.limit("20/minute")
 async def initiate_login(request: Request):
     """
-    Returns a GitHub OAuth authorization URL and a state token.
+    Returns a 42 Intra OAuth authorization URL and a state token.
     The client opens the URL in the system browser and polls /poll/{state}.
     """
     client_id = settings.GITHUB_CLIENT_ID.strip()
     client_secret = settings.GITHUB_CLIENT_SECRET.strip()
+    intra_client_id = settings.INTRA_CLIENT_ID.strip()
+    intra_client_secret = settings.INTRA_CLIENT_SECRET.strip()
 
     if (
         not client_id
         or not client_secret
+        or not intra_client_id
+        or not intra_client_secret
         or "your_client_id" in client_id
         or "your_client_secret" in client_secret
+        or "your_intra_client_id" in intra_client_id
+        or "your_intra_client_secret" in intra_client_secret
     ):
         raise HTTPException(
             status_code=503,
             detail=(
-                "GitHub OAuth App credentials are not configured! "
-                "Please edit 'server/.env' and replace 'your_client_id_here' and 'your_client_secret_here' "
-                "with your actual Client ID and Client Secret from https://github.com/settings/developers."
+                "OAuth credentials are not configured. Set both the GitHub OAuth credentials "
+                "and the 42 Intra OAuth credentials in server/.env."
             ),
         )
     state = create_state_token()
-    redirect_uri = _get_redirect_uri(request)
-    auth_url = build_auth_url(state, redirect_uri=redirect_uri)
+    auth_url = build_intra_auth_url(state, redirect_uri=_get_intra_redirect_uri(request))
     return LoginInitResponse(auth_url=auth_url, state=state)
+
+
+@router.get("/intra/callback")
+async def intra_oauth_callback(code: str, state: str, request: Request):
+    """Complete Intra authentication, then continue the same state in GitHub."""
+    intra_token = await exchange_intra_code_for_token(
+        code, redirect_uri=_get_intra_redirect_uri(request)
+    )
+    if not intra_token:
+        return HTMLResponse(
+            _html_result("Authentication Failed", "Could not exchange the Intra code for a token.", False),
+            status_code=400,
+        )
+
+    intra_user = await get_intra_user(intra_token)
+    if not intra_user or not intra_user.get("id") or not intra_user.get("login"):
+        return HTMLResponse(
+            _html_result("Authentication Failed", "Could not fetch your 42 Intra profile.", False),
+            status_code=400,
+        )
+
+    if not update_state(
+        state,
+        intra_id=intra_user["id"],
+        intra_login=intra_user["login"],
+    ):
+        return HTMLResponse(
+            _html_result("Login Session Expired", "Please return to ZeroOps and start login again.", False),
+            status_code=400,
+        )
+
+    github_url = build_auth_url(state, redirect_uri=_get_redirect_uri(request))
+    return RedirectResponse(github_url, status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -120,20 +174,39 @@ async def oauth_callback(
 
     github_email = await get_github_primary_email(access_token)
 
+    pending_state = get_state(state)
+    if not pending_state or not pending_state.get("intra_id"):
+        return HTMLResponse(
+            _html_result("Authentication Failed", "Complete 42 Intra authentication before GitHub authentication.", False),
+            status_code=400,
+        )
+
     # Upsert user in database
-    user = await _upsert_user(db, github_user, github_email, access_token)
+    user = await _upsert_user(
+        db,
+        github_user,
+        github_email,
+        access_token,
+        int(pending_state["intra_id"]),
+        str(pending_state["intra_login"]),
+    )
+    if user is None:
+        return HTMLResponse(
+            _html_result("Authentication Failed", "This 42 Intra account is linked to a different GitHub account.", False),
+            status_code=409,
+        )
 
     # Create JWT session token for the client
     session_token = create_session_token(user.id)
 
     # Mark state as complete so the polling client can pick it up
     completed = complete_state(state, session_token)
-    print(f"[SERVER OAUTH CALLBACK] state={state[:10]}... user={user.github_username} completed={completed}", flush=True)
+    print(f"[SERVER OAUTH CALLBACK] state={state[:10]}... user={user.github_username} intra={user.intra_login} completed={completed}", flush=True)
     if not completed:
         return HTMLResponse(
             _html_result(
                 "Login Session Expired",
-                "Your authorization window expired. Please return to the ZeroOps app and click 'Login with GitHub' again.",
+                "Your authorization window expired. Please return to the ZeroOps app and click 'Login with 42 Intra' again.",
                 False,
             ),
             status_code=400,
@@ -142,7 +215,7 @@ async def oauth_callback(
     return HTMLResponse(
         _html_result(
             "Authorization Successful!",
-            f"Welcome, @{user.github_username}! You can close this tab and return to the terminal.",
+            f"Welcome, @{user.intra_login} (@{user.github_username})! You can close this tab and return to the terminal.",
             True,
         )
     )
@@ -189,21 +262,38 @@ def _get_redirect_uri(request: Request) -> str:
     base_url = str(request.base_url).rstrip("/")
     return f"{base_url}/v1/auth/callback"
 
+
+def _get_intra_redirect_uri(request: Request) -> str:
+    """Return the exact callback URI registered in the Intra OAuth app."""
+    configured_uri = settings.INTRA_REDIRECT_URI.strip().rstrip("/")
+    if configured_uri:
+        return configured_uri
+    base_url = str(request.base_url).rstrip("/")
+    return f"{base_url}/v1/auth/intra/callback"
+
+
 async def _upsert_user(
     db: AsyncSession,
     github_user: dict,
     github_email: str | None,
     access_token: str,
-) -> User:
+    intra_id: int,
+    intra_login: str,
+) -> User | None:
     """
-    Insert a new user or update an existing one matched by github_id.
-    Link by email is handled naturally: if the email already exists on another
-    account, the github_id uniqueness constraint will prevent duplicate creation.
+    Insert a new user or update an existing one matched by github_id or intra_id.
+    Existing users are matched by either provider identity. A conflicting pair
+    is rejected rather than merging two accounts.
     """
     github_id = github_user["id"]
 
-    result = await db.execute(select(User).where(User.github_id == github_id))
-    user = result.scalar_one_or_none()
+    github_result = await db.execute(select(User).where(User.github_id == github_id))
+    user = github_result.scalar_one_or_none()
+    intra_result = await db.execute(select(User).where(User.intra_id == intra_id))
+    intra_user = intra_result.scalar_one_or_none()
+    if user is not None and intra_user is not None and user.id != intra_user.id:
+        return None
+    user = user or intra_user
 
     if user is None:
         user = User(
@@ -211,6 +301,8 @@ async def _upsert_user(
             github_username=github_user.get("login", ""),
             github_avatar=github_user.get("avatar_url", ""),
             github_email=github_email,
+            intra_id=intra_id,
+            intra_login=intra_login,
             access_token=access_token,
         )
         db.add(user)
@@ -219,6 +311,8 @@ async def _upsert_user(
         user.github_username = github_user.get("login", user.github_username)
         user.github_avatar = github_user.get("avatar_url", user.github_avatar)
         user.github_email = github_email or user.github_email
+        user.intra_id = intra_id
+        user.intra_login = intra_login
         user.access_token = access_token  # Always refresh token
 
     await db.commit()
@@ -245,6 +339,8 @@ def _build_profile_response(user: User) -> UserProfileResponse:
         github_username=user.github_username,
         github_avatar=user.github_avatar or "",
         github_email=user.github_email,
+        intra_id=user.intra_id,
+        intra_login=user.intra_login,
         current_level=user.current_level,
         current_exercise_id=user.current_exercise_id,
         total_xp=user.total_xp,

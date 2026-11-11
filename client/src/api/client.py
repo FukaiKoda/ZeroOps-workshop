@@ -22,7 +22,7 @@ class ZeroOpsClient:
     # -----------------------------------------------------------------------
 
     async def initiate_login(self) -> Dict[str, Any]:
-        """Request a GitHub OAuth URL and state token from the server."""
+        """Request the first (42 Intra) OAuth URL and state token."""
         try:
             response = await self.client.get("/v1/auth/login")
             response.raise_for_status()
@@ -43,7 +43,7 @@ class ZeroOpsClient:
             return {"status": "error", "error": str(e)}
 
     async def get_me(self) -> Dict[str, Any]:
-        """Fetch the authenticated user's GitHub profile and repository info."""
+        """Fetch the authenticated user's identities and repository info."""
         log_debug("[get_me] 1 before sending GET /v1/auth/me...")
         try:
             response = await self.client.get("/v1/auth/me")
