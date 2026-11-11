@@ -16,7 +16,7 @@ from jose import JWTError, jwt
 
 from .config import settings
 
-STATE_FILE = settings.DATA_DIR / "pending_states.json"
+STATE_FILE = settings.DATA_DIR / f"pending_states_{settings.WORKSHOP_ID}.json"
 
 
 def _load_states() -> dict:
@@ -133,6 +133,7 @@ def create_session_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=settings.JWT_EXPIRE_DAYS)
     payload = {
         "sub": str(user_id),
+        "workshop": settings.WORKSHOP_ID,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
@@ -149,7 +150,7 @@ def verify_session_token(token: str) -> Optional[int]:
             token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
         user_id_str: str = payload.get("sub")
-        if user_id_str is None:
+        if user_id_str is None or payload.get("workshop") != settings.WORKSHOP_ID:
             return None
         return int(user_id_str)
     except (JWTError, ValueError):

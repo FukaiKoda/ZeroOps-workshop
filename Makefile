@@ -44,12 +44,6 @@ test-exercises:
 	@echo "Fetching details for ex00_hello..."
 	@curl -s http://127.0.0.1:8000/v1/exercises/ex00_hello | python3 -m json.tool
 
-test-grade-docker:
-	@echo "Submitting ex01_docker for 'test_user'..."
-	@curl -X POST http://127.0.0.1:8000/v1/grade \
-		-H "Content-Type: application/json" \
-		-d '{"user_id": "test_user", "exercise_id": "ex01_docker", "code": "FROM alpine\nCMD echo hello"}' | python3 -m json.tool
-
 test-leaderboard:
 	@echo "Fetching Leaderboard..."
 	@curl -s http://127.0.0.1:8000/v1/leaderboard | python3 -m json.tool

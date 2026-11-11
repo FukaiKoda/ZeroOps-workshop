@@ -3,45 +3,114 @@
 
 ## 🔑 Core Concepts
 
-- What `--soft`, `--mixed` and `--hard` do
-- `git reflog` as the safety net for "lost" commits
+- The three modes of `git reset`:
+  - `--soft`: Moves HEAD pointer back; keeps your changes **staged** in the index.
+  - `--mixed` (default): Moves HEAD back; unstages changes but keeps them in your **working directory**.
+  - `--hard`: Moves HEAD back and **discards** changes from both index and working tree.
+- `git reflog`: Git's local flight recorder that tracks every movement of HEAD, serving as your safety net to recover seemingly lost commits.
 
 ## 🧩 Scenario
-A teammate made three commits and asks you to "undo the last one" in three different ways. The last way deletes real work, so you'll have to bring it back.
+A teammate committed work prematurely and wants you to test undoing commits using different reset strategies. During the `--hard` reset, the latest progress is wiped out, so you will use `git reflog` to resurrect the commit and restore the full history.
 
 ## 🎯 Objective
-Use each reset mode on purpose, see the difference, and recover work after a `--hard` reset.
+Experience `--soft`, `--mixed`, and `--hard` resets, and use `git reflog` to safely recover from a hard reset.
 
-## 📥 Provided
+## 📥 Provided & Initial Setup
 
-- A practice repo. Create it with this script:
+- **Work directory:** `~/rendudevops/ex04_reset/`
+- Enter that folder and run the setup script to initialize the `lab05` practice repository:
+  ```bash
+  cd ~/rendudevops/ex04_reset
+  git init -b main lab05 && cd lab05
+  for i in 1 2 3; do echo "step $i" >> progress.txt; git add . ; git commit -m "Step $i"; done
+  ```
+- **Submission:** This lab is evaluated from your repository in `~/rendudevops/ex04_reset/lab05/`.
 
-```bash
-git init -b main lab05 && cd lab05
-for i in 1 2 3; do echo "step $i" >> progress.txt; git add . ; git commit -m "Step $i"; done
-```
+---
 
-## 🛠️ Task List
+## 🛠️ Task List (Split into Parts)
 
-- Run `git lg` and `cat progress.txt` (3 commits, 3 lines).
-- **Soft:** run `git reset --soft HEAD~1`, then `git status`. Your change is still staged. Recommit it: `git commit -m "Step 3 again"`.
-- **Mixed:** run `git reset --mixed HEAD~1`, then `git status`. Your change is still there, but not staged. Recommit it: `git commit -am "Step 3 again"`.
-- **Hard:** run `git reset --hard HEAD~1`, then `cat progress.txt`. The last line is gone.
-- **Rescue:** run `git reflog`, then `git reset --hard HEAD@{1}`. Check `cat progress.txt` again.
-- ⭐ **Bonus:** run `git revert HEAD --no-edit` and see how it differs from a reset (it adds a new commit instead of removing one).
+### Part 1 — Soft Reset (`--soft`)
+1. View initial state (3 commits, 3 lines):
+   ```bash
+   git lg
+   cat progress.txt
+   ```
+2. Undo the last commit while keeping changes staged:
+   ```bash
+   git reset --soft HEAD~1
+   ```
+3. Run `git status` — notice `progress.txt` is already staged (green).
+4. Recommit it:
+   ```bash
+   git commit -m "Step 3 again"
+   ```
+
+### Part 2 — Mixed Reset (`--mixed`)
+1. Undo the last commit while unstaging changes:
+   ```bash
+   git reset --mixed HEAD~1
+   ```
+2. Run `git status` — `progress.txt` is modified but **not staged** (red).
+3. Stage and recommit:
+   ```bash
+   git commit -am "Step 3 again"
+   ```
+
+### Part 3 — Hard Reset (`--hard`) and Reflog Recovery
+1. Run a hard reset to discard the commit and its changes:
+   ```bash
+   git reset --hard HEAD~1
+   ```
+2. Check `progress.txt`:
+   ```bash
+   cat progress.txt
+   ```
+   Notice that `step 3` is gone!
+3. Open the reflog to find the commit SHA before the reset:
+   ```bash
+   git reflog
+   ```
+   Look for the entry right before the reset (e.g. `HEAD@{1}`).
+4. Recover the lost commit:
+   ```bash
+   git reset --hard 'HEAD@{1}'
+   ```
+5. Confirm that `progress.txt` now contains all three lines:
+   ```bash
+   cat progress.txt
+   # Should output:
+   # step 1
+   # step 2
+   # step 3
+   ```
+
+### ⭐ Bonus (Optional: Revert)
+Run `git revert HEAD --no-edit` and observe how `revert` differs from `reset`: revert creates a *new* inverse commit rather than rewriting history.
+
+---
 
 ## ⚠️ Constraints
 
-- Only do this in the `lab05` repo.
+- Perform all reset commands inside the `lab05/` repository.
+- After recovery, `progress.txt` must contain all 3 steps (`step 1`, `step 2`, `step 3`).
 
-## 🧪 Validation
+---
 
-- After the rescue, `git log --oneline` shows 3 commits and `progress.txt` has 3 lines.
+## 🧪 Grading Checklist
+
+The grader evaluates your submission across three distinct parts:
+
+| Part | Description | What the grader checks |
+|:---:|:---|:---|
+| **Part 1** | File Presence | `progress.txt` is present in `lab05/` or the exercise directory. |
+| **Part 2** | Restored Steps | `progress.txt` contains all three steps (`step 1`, `step 2`, `step 3`). |
+| **Part 3** | Commit Recovery | History has all 3 steps restored via reflog. |
 
 ## 🧠 Hints
 
-- Memory trick: **soft** keeps changes staged, **mixed** keeps them unstaged, **hard** throws them away.
-- `HEAD~1` means "one commit before the current one", and `HEAD@{1}` means "where HEAD was one move ago".
-- `reflog` can't save **uncommitted** work destroyed by `--hard`. Commit first.
-
----
+- Quick memory rule:
+  - **soft** keeps changes in the index (staged)
+  - **mixed** keeps changes in the working tree (unstaged)
+  - **hard** discards changes
+- `git reflog` records local HEAD movements for about 30–90 days, giving you ample time to rescue any committed work.

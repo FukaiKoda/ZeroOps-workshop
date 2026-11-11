@@ -5,5 +5,7 @@
   "title": "Hello, Remote",
   "points": 10,
   "requirements": ["git"],
-  "type": "git"
+  "type": "git",
+  "requires_remote": true,
+  "remote_path": ""
 }

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.db import get_db
+from ..core.config import settings
 from ..core.rate_limit import limiter
 from ..core.github_repo import (
     verify_repo_exists,
@@ -101,6 +102,16 @@ async def link_repository(
 
     if not owner or not repo:
         raise HTTPException(status_code=422, detail="owner and repo must not be empty.")
+
+    expected_repository = settings.WORKSHOP_REPOSITORY.strip().strip("/")
+    if expected_repository and f"{owner}/{repo}".lower() != expected_repository.lower():
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"This workshop uses '{expected_repository}'. "
+                "Repositories from another workshop cannot be linked."
+            ),
+        )
 
     # Security: verify repository exists
     if not await verify_repo_exists(owner, repo, current_user.access_token):

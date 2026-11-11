@@ -108,7 +108,7 @@ async def verify_exercise_folder_exists(
     owner: str, repo: str, exercise_id: str, token: str
 ) -> bool:
     """
-    Check whether a specific exercise folder (e.g., ex01_docker_coming_soon)
+    Check whether a specific exercise folder exists in the linked repository.
     exists in the repository.
     """
     dirs = await list_repo_top_level_dirs(owner, repo, token)

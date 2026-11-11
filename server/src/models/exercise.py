@@ -11,12 +11,7 @@ class ExerciseState(str, Enum):
 
 
 class ExerciseType(str, Enum):
-    DOCKER = "docker"
-    KUBERNETES = "kubernetes"
-    PROMETHEUS = "prometheus"
-    GRAFANA = "grafana"
-    INTERACTIVE = "interactive"
-    GITHUB_ACTIONS = "github_actions"
+    GIT = "git"
 
 
 class ExerciseMetadata(BaseModel):
@@ -27,7 +22,9 @@ class ExerciseMetadata(BaseModel):
     requirements: List[str] = []
     setup_script: Optional[str] = None
     test_suite: str = "test_suite.py"
-    type: ExerciseType = ExerciseType.DOCKER
+    type: ExerciseType = ExerciseType.GIT
+    requires_remote: bool = False
+    remote_path: str | None = None
 
     def get_folder_name(self) -> str:
         return self.folder or self.id

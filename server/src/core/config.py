@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings
 from pathlib import Path
 import os
+import re
 import secrets
 
 
@@ -8,6 +9,8 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     DEBUG: bool = False
+    WORKSHOP_ID: str = "git"
+    WORKSHOP_REPOSITORY: str = ""
 
     # Paths
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
@@ -44,8 +47,15 @@ class Settings(BaseSettings):
     def model_post_init(self, __context):
         self.DATA_DIR.mkdir(parents=True, exist_ok=True)
         self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        self.WORKSHOP_ID = re.sub(
+            r"[^a-z0-9_-]+", "-", self.WORKSHOP_ID.strip().lower()
+        ).strip("-_")
+        if not self.WORKSHOP_ID:
+            raise ValueError("ZEROOPS_WORKSHOP_ID must not be empty")
         if not self.DATABASE_URL:
-            self.DATABASE_URL = f"sqlite+aiosqlite:///{self.DATA_DIR}/zeroops.db"
+            self.DATABASE_URL = (
+                f"sqlite+aiosqlite:///{self.DATA_DIR}/{self.WORKSHOP_ID}.db"
+            )
         self.EXERCISES_DIR = self.DATA_DIR / "exercises"
 
     class Config:

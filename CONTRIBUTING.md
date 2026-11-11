@@ -26,7 +26,7 @@ Please refer to [CLIENT.md](CLIENT.md) and [SERVER.md](SERVER.md) for more info.
 
 -   Python 3.10+
 -   Poetry (`pip install poetry`)
--   Docker & Kubectl (for exercises)
+-   Git (for exercises)
 
 ### Running Locally
 
@@ -49,7 +49,7 @@ Please refer to [CLIENT.md](CLIENT.md) and [SERVER.md](SERVER.md) for more info.
 
 ## Adding New Exercises
 
-We highly encourage contributions that add `level_XX` exercises for tools *other* than Docker and Kubernetes (which are already extensively covered). However, there is always room for improvement, so submitting new exercises or refining existing ones for these technologies is also welcome!
+We welcome contributions that add or improve Git exercises in the workshop's `level_XX` directories.
 
 ### Exercise Structure
 
@@ -63,7 +63,7 @@ Each exercise lives in `data/exercises/level_XX/exYY_name/` and must contain exa
      "title": "Exercise Title",
      "points": 10,
      "requirements": [],
-     "type": "docker" // e.g., 'docker', 'kubernetes', 'terraform', 'interactive', 'python'
+    "type": "git"
    }
    ```
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -6,6 +6,7 @@ class SubmissionRequest(BaseModel):
     user_id: str
     exercise_id: str
     code: Optional[str] = None
+    files: dict[str, str] = Field(default_factory=dict)
     commit_hash: Optional[str] = None  # Latest commit hash from synced repo
 
 

@@ -8,7 +8,7 @@ The Client is a **Terminal User Interface (TUI)** built with `Textual`. It runs 
 2. **Local Execution**:
     - Receives grading scripts (`check.py`) from the server.
     - Executes them **locally** in a subprocess.
-    - This allows the script to inspect the user's *actual* Docker/Kubernetes environment (`docker ps`, `kubectl get pods`).
+    - This allows the script to inspect the user's actual Git repository and command output.
 3. **Submission**: Sends the execution result + nonce back to the server.
 
 ## Architecture

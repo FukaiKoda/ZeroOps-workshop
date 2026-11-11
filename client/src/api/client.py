@@ -145,11 +145,18 @@ class ZeroOpsClient:
         except httpx.HTTPError:
             return []
 
-    async def submit_exercise(self, exercise_id: str, code: str = "", commit_hash: Optional[str] = None) -> Dict[str, Any]:
+    async def submit_exercise(
+        self,
+        exercise_id: str,
+        code: str = "",
+        files: Optional[Dict[str, str]] = None,
+        commit_hash: Optional[str] = None,
+    ) -> Dict[str, Any]:
         payload = {
             "user_id": settings.USER_ID,
             "exercise_id": exercise_id,
             "code": code,
+            "files": files or {},
             "commit_hash": commit_hash,
         }
         try:

@@ -1,9 +1,0 @@
-{
-  "id": "ex04_job_dependencies",
-  "folder": "ex04_job_dependencies",
-  "version": 1,
-  "title": "Job Dependencies (needs:)",
-  "points": 40,
-  "requirements": ["ex03_multi_job_pipeline"],
-  "type": "github_actions"
-}

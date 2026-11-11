@@ -3,14 +3,14 @@
 ![Open Source](https://img.shields.io/badge/Open%20Source-Yes-green)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
-A technical workshop platform designed for the "ZeroOps" workshop. This system orchestrates the delivery, grading, and progress tracking of Docker and Kubernetes exercises using a **Thin Client / Thick Server** architecture, with a twist: **Client-Side Grading**.
+A technical workshop platform designed for the Git workshop. This system orchestrates the delivery, grading, and progress tracking of Git exercises using a **Thin Client / Thick Server** architecture, with a twist: **Client-Side Grading**.
 
 ## 1. System Architecture & Responsibilities
 
 ### Client (TUI)
--   **Environment:** Runs centrally on the user's machine (where they have `docker` and `kubectl` access).
+-   **Environment:** Runs centrally on the user's machine where Git is installed.
 -   **Interface:** A rich Terminal User Interface (TUI) built with `Textual`.
--   **Execution Engine:** The client receives grading scripts (`check.py`) from the server and executes them **locally**. This allows the grading logic to inspect the user's actual system state (e.g., running containers, active pods) without requiring a complex remote sandbox.
+-   **Execution Engine:** The client receives grading scripts (`check.py`) from the server and executes them **locally**.
 -   [Read more about the Client Architecture](CLIENT.md)
 
 ### Server (The Brain)
@@ -28,8 +28,7 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
 1.  **Request**: User clicks "Submit". Client sends `POST /v1/grade`.
 2.  **Prepare**: Server generates a `nonce` and retrieves the `check.py` script for the exercise.
 3.  **Execute**: Client receives the script and runs it in a subprocess (`LocalGrader`).
-    -   **Level 00 (Docker)**: Checks for running containers/images.
-    -   **Level 01 (K8s)**: Validates local YAML files AND performs system checks using `kubectl`.
+    -   **Level 00 (Git)**: Validates the user's local Git repository.
 4.  **Verify**: Client sends the result + `nonce` to `POST /v1/verify`.
 5.  **Update**: Server validates the `nonce`, updates the user's score/level, and invalidates the nonce.
 
@@ -59,10 +58,8 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
 │   └── pyproject.toml
 │
 ├── data/                   # The "Single Source of Truth"
-│   ├── exercises/
-│   │   ├── level_00/       # Docker Exercises (ex00 - ex09)
-│   │   └── level_01/       # Kubernetes Exercises (ex00 - ex11)
-│   └── users/              # JSON User Database
+│   ├── exercises/           # Git exercises
+│   └── users/               # JSON User Database
 │
 └── Makefile                # Management commands
 ```
@@ -72,7 +69,7 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
 ### Prerequisites
 -   Python 3.10+
 -   Poetry (`pip install poetry`)
--   Docker & Kubectl (for exercises)
+-   Git (for exercises)
 
 ### Quick Start
 
@@ -94,6 +91,15 @@ To ensure fair usage and server stability, endpoints are rate-limited using `slo
     make run-client
     ```
     The client will connect to `http://localhost:8000` by default.
+
+### Workshop Isolation
+
+Each workshop deployment must use its own `ZEROOPS_WORKSHOP_ID` in both
+`server/.env` and `client/.env` (this deployment uses `git`). The
+server creates a separate SQLite database and OAuth state file for each ID,
+and the client stores a separate login token. To restrict a deployment to its
+workshop repository, set `ZEROOPS_WORKSHOP_REPOSITORY=owner/repository` in
+`server/.env`.
 
 ### Testing
 -   `make test-health`: Check server connectivity.

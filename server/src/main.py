@@ -31,6 +31,8 @@ async def root():
     return {
         "status": "ok",
         "message": "ZeroOps Server is running",
+        "workshop": settings.WORKSHOP_ID,
+        "repository": settings.WORKSHOP_REPOSITORY or None,
         "env": settings.DEBUG,
         "version": "2.0.0",
     }

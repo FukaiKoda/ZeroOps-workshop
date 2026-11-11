@@ -422,47 +422,11 @@ class Dashboard(Screen):
 
         exercise_type = details.get("type", "python")
 
-        # ---------------------------------------------------------------
-        # GitHub Actions: server fetches workflow files from GitHub API.
-        # No local file reading needed.
-        # ---------------------------------------------------------------
-        if exercise_type == "github_actions":
-            client = ZeroOpsClient()
-            try:
-                data = await client.submit_exercise(
-                    self.current_exercise,
-                    code="",  # server ignores this for github_actions
-                    commit_hash=self._last_commit_hash,
-                )
-            except Exception as e:
-                self.notify(f"Submission failed: {e}", severity="error")
-                return
-            finally:
-                await client.close()
-
-            is_success = data.get("status") == "success"
-            message = data.get("message", "Unknown result")
-
-            async def _on_result_dismissed_ga(dismissed_result=None) -> None:
-                await self.refresh_status()
-
-            self.app.push_screen(
-                SubmissionResultScreen(
-                    success=is_success,
-                    message=message,
-                    exercise_id=self.current_exercise,
-                ),
-                _on_result_dismissed_ga,
-            )
-            return
-
-        # ---------------------------------------------------------------
-        # All other exercise types: collect local files, run locally
-        # ---------------------------------------------------------------
+        # Collect local files for the exercise's grading script.
         target_files = self._get_target_files(exercise_type)
         exercise_dir = settings.RENDU_DIR / self.current_exercise
 
-        code_to_submit, files_found = self._collect_exercise_code(
+        code_to_submit, files_found, local_files = self._collect_exercise_code(
             exercise_dir, target_files, exercise_type
         )
 
@@ -476,6 +440,7 @@ class Dashboard(Screen):
             data = await client.submit_exercise(
                 self.current_exercise,
                 code=code_to_submit,
+                files=local_files,
                 commit_hash=self._last_commit_hash,
             )
         except Exception as e:
@@ -506,9 +471,10 @@ class Dashboard(Screen):
 
     def _collect_exercise_code(
         self, exercise_dir, target_files, exercise_type
-    ) -> tuple[str, list]:
+    ) -> tuple[str, list, dict[str, str]]:
         code_parts = []
         files_found = []
+        file_contents = {}
 
         def read_file(path):
             try:
@@ -525,55 +491,23 @@ class Dashboard(Screen):
                 content = read_file(file_path)
                 if content is not None:
                     code_parts.append(content)
+                    file_contents[target] = content
 
-        if exercise_type == "kubernetes":
-            for ext in ["*.yaml", "*.yml"]:
-                for fpath in exercise_dir.glob(ext):
-                    if fpath.name not in files_found:
-                        files_found.append(fpath.name)
-                        content = read_file(fpath)
-                        if content is not None:
-                            code_parts.append(content)
+        if not target_files and exercise_dir.exists():
+            for file_path in exercise_dir.rglob("*"):
+                if not file_path.is_file() or ".git" in file_path.parts:
+                    continue
+                relative_path = file_path.relative_to(exercise_dir).as_posix()
+                content = read_file(file_path)
+                if content is not None:
+                    files_found.append(relative_path)
+                    file_contents[relative_path] = content
+                    code_parts.append(content)
 
-        if exercise_type == "github_actions":
-            workflows_dir = exercise_dir / ".github" / "workflows"
-            if workflows_dir.exists():
-                for ext in ["*.yaml", "*.yml"]:
-                    for fpath in workflows_dir.glob(ext):
-                        rel_name = f".github/workflows/{fpath.name}"
-                        if rel_name not in files_found:
-                            files_found.append(rel_name)
-                            content = read_file(fpath)
-                            if content is not None:
-                                code_parts.append(content)
-
-        return "\n---\n".join(code_parts), files_found
+        return "\n---\n".join(code_parts), files_found, file_contents
 
     def _get_target_files(self, exercise_type: str) -> list:
         file_mapping = {
-            "python": ["main.py"],
-            "docker": ["Dockerfile"],
-            "kubernetes": [
-                "deployment.yaml", "service.yaml", "pod.yaml",
-                "configmap.yaml", "secret.yaml", "ingress.yaml",
-                "pv.yaml", "pvc.yaml", "namespace.yaml", "replicaset.yaml",
-            ],
-            "docker-compose": ["docker-compose.yaml", "docker-compose.yml"],
-            "prometheus": ["prometheus.yml", "prometheus.yaml", "alerting-rules.yml"],
-            "grafana": ["dashboard.json", "datasource.yaml"],
-            "terraform": ["main.tf", "variables.tf", "outputs.tf"],
-            "ansible": ["playbook.yaml", "playbook.yml", "inventory.ini"],
-            "helm": ["Chart.yaml", "values.yaml"],
-            "shell": ["script.sh", "main.sh"],
-            "c": ["main.c", "Makefile"],
-            "interactive": [],
-            "github_actions": [
-                ".github/workflows/build.yml",
-                ".github/workflows/build.yaml",
-                ".github/workflows/ci.yml",
-                ".github/workflows/ci.yaml",
-                ".github/workflows/main.yml",
-                ".github/workflows/main.yaml",
-            ],
+            "git": [],
         }
-        return file_mapping.get(exercise_type, ["main.py"])
+        return file_mapping.get(exercise_type, [])

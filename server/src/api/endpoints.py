@@ -3,19 +3,20 @@ Core exercise endpoints — status, exercise details, grading and leaderboard.
 User identity now comes from the JWT-authenticated User ORM object.
 """
 
-from fastapi import APIRouter, Request, Depends
 from datetime import datetime
-from pydantic import BaseModel
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
-from ..core.db import get_db
+from fastapi import APIRouter, Depends, Request
+from pydantic import BaseModel
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from ..core.database import exercise_db
+from ..core.db import get_db
+from ..core.github_repo import fetch_directory, fetch_workflow_files
 from ..core.rate_limit import limiter
-from ..core.github_repo import fetch_workflow_files, fetch_directory
-from ..models.db_user import User
 from ..models.db_submission import ExerciseSubmission
+from ..models.db_user import User
 from ..models.exercise import ExerciseState, ExerciseType
 from ..models.submission import (
     SubmissionRequest,
@@ -35,6 +36,7 @@ PENDING_SUBMISSIONS: dict[str, dict] = {}
 # Schemas
 # ---------------------------------------------------------------------------
 
+
 class StatusResponse(BaseModel):
     user_id: str
     github_username: str
@@ -50,8 +52,7 @@ class ExerciseDetailsResponse(BaseModel):
     version: int = 1
     points: int
     subject: str
-    type: ExerciseType = ExerciseType.DOCKER
-
+    type: ExerciseType = ExerciseType.GIT
 
 
 class SubmissionHistoryEntry(BaseModel):
@@ -68,6 +69,7 @@ class SubmissionHistoryEntry(BaseModel):
 # For backwards compatibility, accepts github_username as user_id.
 # Protected: requires JWT.
 # ---------------------------------------------------------------------------
+
 
 @router.get("/status/{user_id}", response_model=StatusResponse)
 @limiter.limit("240/minute")
@@ -100,6 +102,7 @@ async def get_status(
 # GET /v1/exercises/{exercise_id}
 # ---------------------------------------------------------------------------
 
+
 @router.get("/exercises/{exercise_id}", response_model=ExerciseDetailsResponse)
 @limiter.limit("240/minute")
 async def get_exercise(request: Request, exercise_id: str):
@@ -107,11 +110,18 @@ async def get_exercise(request: Request, exercise_id: str):
     details = exercise_db.get_exercise_details(exercise_id)
     if not details:
         return ExerciseDetailsResponse(
-            id=exercise_id, folder=exercise_id, version=1, points=0, subject="Exercise not found.", type="python"
+            id=exercise_id,
+            folder=exercise_id,
+            version=1,
+            points=0,
+            subject="Exercise not found.",
+            type=ExerciseType.GIT,
         )
 
     meta = details["meta"]
-    folder_name = getattr(meta, "folder", None) or (meta.get_folder_name() if hasattr(meta, "get_folder_name") else meta.id)
+    folder_name = getattr(meta, "folder", None) or (
+        meta.get_folder_name() if hasattr(meta, "get_folder_name") else meta.id
+    )
     version_num = getattr(meta, "version", 1)
     return ExerciseDetailsResponse(
         id=meta.id,
@@ -119,13 +129,14 @@ async def get_exercise(request: Request, exercise_id: str):
         version=version_num,
         points=meta.points,
         subject=details["subject"],
-        type=getattr(meta, "type", "python"),
+        type=getattr(meta, "type", ExerciseType.GIT),
     )
 
 
 # ---------------------------------------------------------------------------
 # POST /v1/grade
 # ---------------------------------------------------------------------------
+
 
 @router.post("/grade", response_model=SubmissionResponse)
 @limiter.limit("60/minute")
@@ -165,7 +176,7 @@ async def submit_exercise(
     exercise_type = getattr(details["meta"], "type", None) if details else None
 
     # Server-side repository folder-scoped grading flow
-    if current_user.repository or exercise_type == ExerciseType.GITHUB_ACTIONS:
+    if exercise_type == ExerciseType.GIT:
         return await grade_submission(
             db=db,
             current_user=current_user,
@@ -174,8 +185,8 @@ async def submit_exercise(
             exercise_id=submission.exercise_id,
             commit_hash=submission.commit_hash,
             details=details,
+            local_files=submission.files,
         )
-
 
     # -----------------------------------------------------------------
     # All other exercise types: client-side grading flow
@@ -212,6 +223,7 @@ async def submit_exercise(
 # POST /v1/verify
 # ---------------------------------------------------------------------------
 
+
 @router.post("/verify", response_model=VerifyResponse)
 @limiter.limit("60/minute")
 async def verify_submission(
@@ -247,10 +259,7 @@ async def verify_submission(
 
     # Determine commit hash — prefer what the verify request carries,
     # fall back to what was stored at grade time
-    commit_hash = (
-        verification.commit_hash
-        or submission_data.get("commit_hash")
-    )
+    commit_hash = verification.commit_hash or submission_data.get("commit_hash")
 
     # Persist submission record
     submission_record = ExerciseSubmission(
@@ -282,6 +291,7 @@ async def verify_submission(
 # GET /v1/leaderboard
 # ---------------------------------------------------------------------------
 
+
 class LeaderboardEntry(BaseModel):
     user_id: str
     github_username: str
@@ -311,6 +321,7 @@ async def get_leaderboard(request: Request, db: AsyncSession = Depends(get_db)):
 # ---------------------------------------------------------------------------
 # GET /v1/submissions/{user_id}
 # ---------------------------------------------------------------------------
+
 
 @router.get("/submissions/{user_id}", response_model=list[SubmissionHistoryEntry])
 @limiter.limit("60/minute")
@@ -345,6 +356,7 @@ async def get_submissions(
 # Generic Server-Side Grader (Folder-Scoped & Isolated Workspace Lifecycle)
 # ---------------------------------------------------------------------------
 
+
 async def grade_submission(
     db: AsyncSession,
     current_user: User,
@@ -353,6 +365,7 @@ async def grade_submission(
     exercise_id: str,
     commit_hash: Optional[str],
     details: dict,
+    local_files: dict[str, str],
 ) -> SubmissionResponse:
     """
     Grade an exercise using the isolated workspace lifecycle:
@@ -363,22 +376,23 @@ async def grade_submission(
     5. Cleanly delete the temporary directory post-execution.
     6. Persist submission outcome independently for exercise_id.
     """
-    import sys
-    import tempfile
     import importlib.util
+    import tempfile
     from pathlib import Path as _Path
 
-    # Ensure the student has a linked repository
+    # A linked repository is optional for local labs. When present, its files
+    # are fetched and merged with the local workspace sent by the client.
     repo = current_user.repository
-    if not repo:
+    meta = details.get("meta") if details else None
+    requires_remote = bool(getattr(meta, "requires_remote", False)) if meta else False
+    if requires_remote and not repo:
         return SubmissionResponse(
-            status="error",
-            message="No repository linked. Please link your GitHub repository first.",
+            status="failure",
+            message="Link the workshop GitHub repository before submitting this lab.",
             new_level=current_user.current_level,
             score=0,
         )
-
-    if not current_user.access_token:
+    if repo and not current_user.access_token:
         return SubmissionResponse(
             status="error",
             message="No GitHub token found. Please log out and log in again.",
@@ -386,28 +400,62 @@ async def grade_submission(
             score=0,
         )
 
-    meta = details.get("meta") if details else None
     if meta and hasattr(meta, "get_folder_name"):
         folder_name = meta.get_folder_name()
     elif meta and getattr(meta, "folder", None):
         folder_name = meta.folder
     else:
         folder_name = exercise_id
+    remote_path = (
+        meta.remote_path
+        if meta and getattr(meta, "remote_path", None) is not None
+        else folder_name
+    )
 
     # Fetch files strictly inside the exercise folder from student's GitHub repo
-    exercise_files = await fetch_directory(
-        owner=repo.owner,
-        repo=repo.repo,
-        directory_path=folder_name,
-        token=current_user.access_token,
+    exercise_files = {}
+    if repo:
+        exercise_files = await fetch_directory(
+            owner=repo.owner,
+            repo=repo.repo,
+            directory_path=remote_path,
+            token=current_user.access_token,
+        )
+
+    if requires_remote and not exercise_files:
+        return SubmissionResponse(
+            status="failure",
+            message=(
+                f"Push the completed '{folder_name}/' directory to the linked "
+                "GitHub repository, then sync and submit again."
+            ),
+            new_level=current_user.current_level,
+            score=0,
+        )
+    if requires_remote and "README.md" not in exercise_files:
+        return SubmissionResponse(
+            status="failure",
+            message="README.md is not present in the pushed GitHub exercise directory.",
+            new_level=current_user.current_level,
+            score=0,
+        )
+
+    # Local files take precedence, so a student can work locally and submit
+    # before pushing; a pushed file remains available when it is not local.
+    exercise_files.update(
+        {
+            path: content
+            for path, content in local_files.items()
+            if not path.startswith(".git/") and path != ".git"
+        }
     )
 
     if not exercise_files:
         return SubmissionResponse(
             status="failure",
             message=(
-                f"Directory '{folder_name}' not found in your repository '{repo.full_name}'.\n"
-                f"Please create the folder '{folder_name}/' in your repository, add your solution files, commit, push, and submit again."
+                f"No files were found for '{folder_name}'. Work in the local folder "
+                f"'~/rendudevops/{folder_name}/' and submit again."
             ),
             new_level=current_user.current_level,
             score=0,
@@ -416,7 +464,6 @@ async def grade_submission(
     # Create temporary isolated workspace (guaranteed cleanup)
     with tempfile.TemporaryDirectory(prefix="zeroops-grade-") as tmp_dir_str:
         tmp_workspace = _Path(tmp_dir_str)
-
         # Write fetched exercise files into the isolated temp workspace
         combined_code_lines = []
         for rel_path, content in exercise_files.items():
@@ -429,7 +476,9 @@ async def grade_submission(
 
         # Dynamically load check.py and execute grade(code, exercise_path=tmp_workspace)
         try:
-            spec = importlib.util.spec_from_file_location("check_module", check_script_path)
+            spec = importlib.util.spec_from_file_location(
+                "check_module", check_script_path
+            )
             check_module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(check_module)
             success, feedback = check_module.grade(combined_code, tmp_workspace)
@@ -466,10 +515,10 @@ async def grade_submission(
     )
 
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 async def _find_current_exercise(db: AsyncSession, user: User) -> Optional[str]:
     """

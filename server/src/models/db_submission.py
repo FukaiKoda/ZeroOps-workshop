@@ -16,7 +16,7 @@ class ExerciseSubmission(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    # Exercise reference (matches the folder name, e.g. "ex00_docker_hello_docker")
+    # Exercise reference (matches the folder name).
     exercise_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     # Result
